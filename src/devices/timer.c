@@ -24,11 +24,15 @@ static int64_t ticks;
    Initialized by timer_calibrate(). */
 static unsigned loops_per_tick;
 
+/* List of sleeping threads */
+static struct list sleep_threads;
+
 static intr_handler_func timer_interrupt;
 static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
 static void real_time_delay (int64_t num, int32_t denom);
+static bool total_ticks_less (const struct list_elem *l1_raw, const struct list_elem *l2_raw, void *aux UNUSED);
 
 /* Sets up the timer to interrupt TIMER_FREQ times per second,
    and registers the corresponding interrupt. */
@@ -37,6 +41,7 @@ timer_init (void)
 {
   pit_configure_channel (0, 2, TIMER_FREQ);
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
+  list_init (&sleep_threads);
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -84,16 +89,32 @@ timer_elapsed (int64_t then)
   return timer_ticks () - then;
 }
 
-/* Sleeps for approximately TICKS timer ticks.  Interrupts must
+/* Sleeps for approximately sleep_ticks timer ticks.  Interrupts must
    be turned on. */
 void
-timer_sleep (int64_t ticks) 
+timer_sleep (int64_t sleep_ticks) 
 {
-  int64_t start = timer_ticks ();
+  // If sleep_ticks non-positive, thread doesn't need to sleep 
+  if (sleep_ticks <= 0)
+    return;
 
   ASSERT (intr_get_level () == INTR_ON);
-  while (timer_elapsed (start) < ticks) 
-    thread_yield ();
+
+  // Set curr total ticks to sleep_ticks + timer_ticks
+  struct sleep_thread_elem curr = { .total_ticks = sleep_ticks + timer_ticks ()};
+
+  /* Disable interrupts */
+  enum intr_level old_level = intr_disable ();
+  
+  sema_init(&curr.sleep_thread_sema, 0);
+
+  /* Insert the thread into the sleep list */
+  list_insert_ordered(&sleep_threads, &curr.elem, total_ticks_less, NULL);
+
+  sema_down(&curr.sleep_thread_sema);
+
+  /* Re-enable interrupts */
+  intr_set_level (old_level);
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -172,6 +193,17 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
+
+  /* Wake up all threads that have slept long enough */
+  while (!list_empty(&sleep_threads)
+  && list_entry(list_front(&sleep_threads), struct sleep_thread_elem, elem)->total_ticks <= ticks)
+  {
+    /* Remove the thread from the list */
+    struct sleep_thread_elem *curr = list_entry(list_pop_front(&sleep_threads), struct sleep_thread_elem, elem); 
+
+    /* Wake up the thread */
+    sema_up(&curr->sleep_thread_sema);
+  } 
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
@@ -243,4 +275,14 @@ real_time_delay (int64_t num, int32_t denom)
      the possibility of overflow. */
   ASSERT (denom % 1000 == 0);
   busy_wait (loops_per_tick * num / 1000 * TIMER_FREQ / (denom / 1000)); 
+}
+
+/* Returns true if the first thread in the sleep list has a lower total
+    tick count (ticks since OS booted + sleep ticks) than the second thread. */
+static bool 
+total_ticks_less (const struct list_elem *l1_raw, const struct list_elem *l2_raw, void *aux UNUSED)
+{
+  const struct sleep_thread_elem *l1 = list_entry (l1_raw, struct sleep_thread_elem, elem);
+  const struct sleep_thread_elem *l2 = list_entry (l2_raw, struct sleep_thread_elem, elem);
+  return l1->total_ticks < l2->total_ticks;
 }
