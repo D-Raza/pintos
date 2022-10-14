@@ -70,7 +70,8 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
-static bool priority_less (const struct list_elem *thread1, const struct list_elem *thread2);
+bool priority_less (const struct list_elem *thread1, 
+		const struct list_elem *thread2, void *aux UNUSED);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -601,8 +602,9 @@ allocate_tid (void)
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
-static bool 
-priority_less (const struct list_elem *thread1, const struct list_elem *thread2){
+bool 
+priority_less (const struct list_elem *thread1, 
+		const struct list_elem *thread2, void *aux UNUSED){
   const struct thread *t1 = list_entry (thread1, struct thread, elem);
   const struct thread *t2 = list_entry (thread2, struct thread, elem);
   return t1->priority > t2 -> priority;
