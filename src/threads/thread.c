@@ -70,6 +70,7 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
+static bool priority_less (const struct list_elem *thread1, const struct list_elem *thread2);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -252,7 +253,8 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  /* list_push_back (&ready_list, &t->elem); */
+  list_insert_ordered (&ready_list, &t->elem, priority_less, NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -351,6 +353,9 @@ void
 thread_set_priority (int new_priority) 
 {
   thread_current ()->priority = new_priority;
+  /* if not highest priority, current thread should yield */
+  /* after implementing donations, check if new priority is higher than highest donated priority */
+
 }
 
 /* Returns the current thread's priority. */
@@ -380,6 +385,7 @@ int
 thread_get_load_avg (void) 
 {
   /* Not yet implemented. */
+  return 0;
   return 0;
 }
 
@@ -499,7 +505,6 @@ alloc_frame (struct thread *t, size_t size)
 
 /* Chooses and returns the next thread to be scheduled.  Should
    return a thread from the run queue, unless the run queue is
-   empty.  (If the running thread can continue running, then it
    will be in the run queue.)  If the run queue is empty, return
    idle_thread. */
 static struct thread *
@@ -597,3 +602,10 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+static bool 
+priority_less (const struct list_elem *thread1, const struct list_elem *thread2){
+  const struct thread *t1 = list_entry (thread1, struct thread, elem);
+  const struct thread *t2 = list_entry (thread2, struct thread, elem);
+  return t1->priority > t2 -> priority;
+}
