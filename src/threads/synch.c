@@ -32,6 +32,9 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 
+static bool semaphore_less (const struct list_elem *a,
+                const struct list_elem *b, void *aux UNUSED);
+
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
    manipulating it:
@@ -69,7 +72,7 @@ sema_down (struct semaphore *sema)
   while (sema->value == 0) 
     {
       list_insert_ordered (&sema->waiters, &thread_current ()->elem, 
-		      &priority_less, NULL);
+		      priority_less, NULL);
       thread_block ();
     }
   sema->value--;
@@ -300,7 +303,8 @@ cond_wait (struct condition *cond, struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
   
   sema_init (&waiter.semaphore, 0);
-  list_push_back (&cond->waiters, &waiter.elem);
+  list_insert_ordered (&cond->waiters, &waiter.elem, 
+	&semaphore_less, NULL);
   lock_release (lock);
   sema_down (&waiter.semaphore);
   lock_acquire (lock);
@@ -340,4 +344,22 @@ cond_broadcast (struct condition *cond, struct lock *lock)
 
   while (!list_empty (&cond->waiters))
     cond_signal (cond, lock);
+}
+
+/* Sort for insertion of current semaphore into condition.
+  
+   The semaphore corresponding to elem a does not yet have its 
+   waiter, which will be the current thread, so we can use 
+   the current priority. Elem b's priority is the priority 
+   of the first waiter thread.  */
+static bool
+semaphore_less (const struct list_elem *a UNUSED, 
+		const struct list_elem *b, void *aux UNUSED)
+{
+  int priority_a = thread_current () -> priority;
+  struct semaphore sema_b = list_entry(b, struct semaphore_elem, elem)
+	-> semaphore;
+  int priority_b = list_entry(list_front(&sema_b.waiters), 
+	struct thread, elem)->priority;
+  return (priority_a > priority_b);
 }
