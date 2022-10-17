@@ -514,10 +514,10 @@ next_thread_to_run (void)
     return idle_thread;
   else
   {
-    struct list_elem *min_elem = 
-	    list_min (&ready_list, priority_less, NULL);
-    list_remove (min_elem);
-    return list_entry (min_elem, struct thread, elem);
+    struct list_elem *max_elem = 
+	    list_max (&ready_list, priority_less, NULL);
+    list_remove (max_elem);
+    return list_entry (max_elem, struct thread, elem);
   }
 }
 
@@ -614,5 +614,5 @@ priority_less (const struct list_elem *thread1,
 		const struct list_elem *thread2, void *aux UNUSED){
   const struct thread *t1 = list_entry (thread1, struct thread, elem);
   const struct thread *t2 = list_entry (thread2, struct thread, elem);
-  return t1->priority > t2 -> priority;
+  return t1->priority <= t2 -> priority;
 }
