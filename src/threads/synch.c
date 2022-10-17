@@ -306,8 +306,7 @@ cond_wait (struct condition *cond, struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
   
   sema_init (&waiter.semaphore, 0);
-  list_insert_ordered (&cond->waiters, &waiter.elem, 
-	&semaphore_less, NULL);
+  list_push_back (&cond->waiters, &waiter.elem);
   lock_release (lock);
   sema_down (&waiter.semaphore);
   lock_acquire (lock);
@@ -329,8 +328,13 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   ASSERT (lock_held_by_current_thread (lock));
 
   if (!list_empty (&cond->waiters)) 
-    sema_up (&list_entry (list_pop_front (&cond->waiters),
-                          struct semaphore_elem, elem)->semaphore);
+  {
+    struct list_elem *min_elem = 
+	    list_min (&cond->waiters, semaphore_less, NULL);
+    list_remove (min_elem);
+    sema_up (&list_entry (min_elem, struct semaphore_elem, elem)
+	    ->semaphore);
+  }
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by
@@ -349,20 +353,25 @@ cond_broadcast (struct condition *cond, struct lock *lock)
     cond_signal (cond, lock);
 }
 
-/* Sort for insertion of current semaphore into condition.
-  
-   The semaphore corresponding to elem a does not yet have its 
-   waiter, which will be the current thread, so we can use 
-   the current priority. Elem b's priority is the priority 
-   of the first waiter thread.  */
+/* List less func for comparing semaphore elems by maximum 
+   priority in their waiters */
 static bool
-semaphore_less (const struct list_elem *a UNUSED, 
+semaphore_less (const struct list_elem *a, 
 		const struct list_elem *b, void *aux UNUSED)
 {
-  int priority_a = thread_current () -> priority;
-  struct semaphore sema_b = list_entry(b, struct semaphore_elem, elem)
-	-> semaphore;
-  int priority_b = list_entry(list_front(&sema_b.waiters), 
+  struct list *waiters_a = &list_entry (
+	a, struct semaphore_elem, elem)->semaphore.waiters;
+  struct list *waiters_b = &list_entry (
+        b, struct semaphore_elem, elem)->semaphore.waiters;
+  int priority_a = PRI_MIN;
+  int priority_b = PRI_MIN;
+  if (!list_empty (waiters_a))
+    priority_a = list_entry (
+	list_min (waiters_a, priority_less, NULL),
+        struct thread, elem)->priority;
+  if (!list_empty (waiters_b))
+    priority_b = list_entry (
+	list_min (waiters_b, priority_less, NULL), 
 	struct thread, elem)->priority;
   return (priority_a > priority_b);
 }
