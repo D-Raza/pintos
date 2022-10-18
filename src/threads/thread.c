@@ -11,6 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "devices/timer.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -23,6 +24,9 @@
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
+
+/* Nested list containing lists for each thread priority value */
+static struct list nested_ready_list;
 
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
@@ -50,6 +54,9 @@ static long long idle_ticks;    /* # of timer ticks spent idle. */
 static long long kernel_ticks;  /* # of timer ticks in kernel threads. */
 static long long user_ticks;    /* # of timer ticks in user programs. */
 
+/* Load average of th CPU */
+static fixed_point_t load_avg;
+
 /* Scheduling. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
@@ -70,6 +77,10 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
+static int bound_nice (int nice);
+static void recalc_load_avg (void);
+static void recalc_recent_cpu (struct thread *t, void *aux UNUSED);
+static int recalc_priority (struct thread *t);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -90,7 +101,17 @@ thread_init (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   lock_init (&tid_lock);
+
   list_init (&ready_list);
+
+  list_init(&nested_ready_list);
+  for (int i = PRI_MIN; i <= PRI_MAX; i++) {
+    struct list priority_ready_list;
+    list_init(&priority_ready_list);
+    list_push_back(&nested_ready_list, &priority_ready_list.head);
+  }
+
+
   list_init (&all_list);
 
   /* Set up a thread structure for the running thread. */
@@ -134,12 +155,24 @@ thread_tick (void)
   /* Update statistics. */
   if (t == idle_thread)
     idle_ticks++;
-#ifdef USERPROG
-  else if (t->pagedir != NULL)
-    user_ticks++;
-#endif
-  else
-    kernel_ticks++;
+  #ifdef USERPROG
+    else if (t->pagedir != NULL)
+      user_ticks++;
+  #endif
+    else
+      kernel_ticks++;
+
+  if (thread_mlfqs) {
+    if (t != idle_thread) {
+      t->recent_cpu = add_fp_int(t->recent_cpu, 1);
+    }
+
+    if (timer_ticks () % TIMER_FREQ == 0 && threads_ready () != load_avg) {
+      recalc_load_avg ();
+      thread_foreach(recalc_recent_cpu, NULL);
+      recalc_priority(t);
+    }
+  }
 
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
@@ -190,6 +223,12 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
+
+  /* If 4.4BSD scheduler enabled,  */
+  if (thread_mlfqs) {
+    t->recent_cpu = thread_current()->recent_cpu;
+    t->nice = thread_current()->nice;
+  }
 
   /* Prepare thread for first run by initializing its stack.
      Do this atomically so intermediate values for the 'stack' 
@@ -349,8 +388,10 @@ thread_foreach (thread_action_func *func, void *aux)
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) 
-{
-  thread_current ()->priority = new_priority;
+{ 
+  if (!thread_mlfqs) {
+    thread_current ()->priority = new_priority;
+  }
 }
 
 /* Returns the current thread's priority. */
@@ -362,33 +403,43 @@ thread_get_priority (void)
 
 /* Sets the current thread's nice value to NICE. */
 void
-thread_set_nice (int nice UNUSED) 
+thread_set_nice (int new_nice) 
 {
-  /* Not yet implemented. */
+  ASSERT(thread_mlfqs);
+  new_nice = bound_nice (new_nice);
+
+  enum intr_level old_level = intr_disable ();
+
+  /* Yield the thread if not highest priority */
+  thread_current()->nice = new_nice;
+  if (thread_get_priority () < list_entry(list_front(&ready_list), struct thread, elem)->priority)
+    thread_yield ();
+  
+  intr_set_level (old_level);
 }
 
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  ASSERT(thread_mlfqs);
+  return thread_current ()->nice;
 }
 
 /* Returns 100 times the system load average. */
 int
 thread_get_load_avg (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  ASSERT(thread_mlfqs);
+  return fp_to_int_round_nearest (multiply_fp_int (load_avg, 100));
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  ASSERT(thread_mlfqs);
+  return fp_to_int_round_nearest (multiply_fp_int (thread_current()->recent_cpu, 100));
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -597,3 +648,44 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+/* Ensures nice value is well bound */
+static 
+int bound_nice (int nice) {
+  if (nice > NICE_MAX) 
+    return NICE_MAX;
+  else if (nice < NICE_MIN) 
+    return NICE_MIN;
+  else 
+    return nice;
+}
+
+/* Recalculates load average */
+static void 
+recalc_load_avg (void) {
+  fixed_point_t coeff1 = divide_fp_int (int_to_fp(59), 60);
+  fixed_point_t coeff2 = divide_fp_int(int_to_fp(1), 60);
+  int ready_threads = threads_ready ();
+  if (thread_current () != idle_thread)
+    ready_threads++; 
+  load_avg = add_fp (multiply_fp (coeff1, load_avg), multiply_fp_int (coeff2, ready_threads));
+}
+
+/* Recalculate recent_cpu */
+static void
+recalc_recent_cpu (struct thread *t, void *aux UNUSED) {
+  fixed_point_t two_load_avg = multiply_fp_int (load_avg, 2);
+  fixed_point_t coeff1 = divide_fp (two_load_avg, add_fp_int (two_load_avg, 1));
+  t->recent_cpu = add_fp_int (multiply_fp (coeff1, t->recent_cpu), t->nice);
+}
+
+/* Recalculates priority of thread */
+static int
+recalc_priority (struct thread *t) {
+  int new_p = PRI_MAX - fp_to_int_round_0 (divide_fp_int (t->recent_cpu, 4)) - t->nice * 2;
+  if (new_p > PRI_MAX)
+    new_p = PRI_MAX;
+  else if (new_p < PRI_MIN)
+    new_p = PRI_MIN; 
+  return new_p;
+}
