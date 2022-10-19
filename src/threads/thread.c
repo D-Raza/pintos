@@ -25,9 +25,6 @@
    that are ready to run but not actually running. */
 static struct list ready_list;
 
-/* Nested list containing lists for each thread priority value */
-static struct list nested_ready_list;
-
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
@@ -54,7 +51,7 @@ static long long idle_ticks;    /* # of timer ticks spent idle. */
 static long long kernel_ticks;  /* # of timer ticks in kernel threads. */
 static long long user_ticks;    /* # of timer ticks in user programs. */
 
-/* Load average of th CPU */
+/* Load average of the CPU */
 static fixed_point_t load_avg;
 
 /* Scheduling. */
@@ -81,6 +78,9 @@ static int bound_nice (int nice);
 static void recalc_load_avg (void);
 static void recalc_recent_cpu (struct thread *t, void *aux UNUSED);
 static int recalc_priority (struct thread *t);
+static void mlfqs_update_priority (struct thread *t, void *aux UNUSED);
+static bool thread_priority_higher (const struct list_elem *l1_raw, const struct list_elem *l2_raw, void *aux UNUSED);
+static void priority_yield (void);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -103,14 +103,6 @@ thread_init (void)
   lock_init (&tid_lock);
 
   list_init (&ready_list);
-
-  list_init(&nested_ready_list);
-  for (int i = PRI_MIN; i <= PRI_MAX; i++) {
-    struct list priority_ready_list;
-    list_init(&priority_ready_list);
-    list_push_back(&nested_ready_list, &priority_ready_list.head);
-  }
-
 
   list_init (&all_list);
 
@@ -163,14 +155,22 @@ thread_tick (void)
       kernel_ticks++;
 
   if (thread_mlfqs) {
-    if (t != idle_thread) {
-      t->recent_cpu = add_fp_int(t->recent_cpu, 1);
+    if (t->status == THREAD_RUNNING) // && t != idle_thread)
+      t->recent_cpu = add_fp_int (t->recent_cpu, 1);
+
+    if (timer_ticks () % TIMER_FREQ == 0) {
+      recalc_load_avg ();
+      // recalc_recent_cpu (t, NULL);
+      thread_foreach (recalc_recent_cpu, NULL);
     }
 
-    if (timer_ticks () % TIMER_FREQ == 0 && threads_ready () != load_avg) {
-      recalc_load_avg ();
-      thread_foreach(recalc_recent_cpu, NULL);
-      recalc_priority(t);
+    /* "... recalculated (if necessary) on every fourth clock tick.""
+     * What is meant by "if necessary"? 
+     */
+    if (timer_ticks () % TIME_SLICE == 0) {
+      // mlfqs_update_priority (t, NULL);
+      thread_foreach (mlfqs_update_priority, NULL);
+      priority_yield ();
     }
   }
 
@@ -222,13 +222,8 @@ thread_create (const char *name, int priority,
 
   /* Initialize thread. */
   init_thread (t, name, priority);
-  tid = t->tid = allocate_tid ();
 
-  /* If 4.4BSD scheduler enabled,  */
-  if (thread_mlfqs) {
-    t->recent_cpu = thread_current()->recent_cpu;
-    t->nice = thread_current()->nice;
-  }
+  tid = t->tid = allocate_tid ();
 
   /* Prepare thread for first run by initializing its stack.
      Do this atomically so intermediate values for the 'stack' 
@@ -254,6 +249,7 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
+  priority_yield ();
 
   return tid;
 }
@@ -291,7 +287,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  list_insert_ordered (&ready_list, &t->elem, thread_priority_higher, NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -362,7 +358,7 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+    list_insert_ordered (&ready_list, &cur->elem, thread_priority_higher, NULL);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -406,15 +402,20 @@ void
 thread_set_nice (int new_nice) 
 {
   ASSERT(thread_mlfqs);
-  new_nice = bound_nice (new_nice);
 
   enum intr_level old_level = intr_disable ();
 
-  /* Yield the thread if not highest priority */
-  thread_current()->nice = new_nice;
-  if (thread_get_priority () < list_entry(list_front(&ready_list), struct thread, elem)->priority)
-    thread_yield ();
-  
+  struct thread *t = thread_current ();
+
+  /* Ensure new nice is in correct bound*/
+  t->nice = bound_nice (new_nice);
+
+  /* Update priority */
+  mlfqs_update_priority (t, NULL);
+
+  /* Yield if new priority is higher than current priority */
+  priority_yield ();
+    
   intr_set_level (old_level);
 }
 
@@ -527,7 +528,25 @@ init_thread (struct thread *t, const char *name, int priority)
   t->status = THREAD_BLOCKED;
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
-  t->priority = priority;
+
+  if (thread_mlfqs) {
+    if (t == initial_thread) {
+      load_avg = LOAD_AVG_INITIAL;
+      t->nice = NICE_INITIAL;
+      // t->recent_cpu = 0;
+      recalc_recent_cpu (t, NULL);
+    } 
+    else {
+      struct thread *cur = thread_current ();
+      t->nice = cur->nice;
+      // t->recent_cpu = cur->recent_cpu;
+      recalc_recent_cpu (t, NULL);
+    }
+    mlfqs_update_priority (t, NULL);
+  }
+  else
+    t->priority = priority;
+  
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
@@ -689,3 +708,30 @@ recalc_priority (struct thread *t) {
     new_p = PRI_MIN; 
   return new_p;
 }
+
+/* Updates priority of mlfqs threads */
+static void
+mlfqs_update_priority (struct thread *t, void *aux UNUSED) {
+  t->priority = recalc_priority (t);
+}
+
+static bool
+thread_priority_higher (const struct list_elem *l1_raw, const struct list_elem *l2_raw, void *aux UNUSED) {
+  struct thread *t1 = list_entry (l1_raw, struct thread, elem);
+  struct thread *t2 = list_entry (l2_raw, struct thread, elem);
+  return t1->priority > t2->priority;
+}
+
+/* If the running thread is not the highest priority, yield. */
+static void 
+priority_yield (void) {
+  enum intr_level old_level = intr_disable ();
+  if (!list_empty (&ready_list) && thread_current ()->priority < list_entry (list_front (&ready_list), struct thread, elem)->priority) {
+    if (intr_context ())
+      intr_yield_on_return ();
+    else
+      thread_yield ();
+  }
+  intr_set_level (old_level);
+}
+  
