@@ -28,6 +28,9 @@ typedef int tid_t;
 /* Maximum and minimum values of nice */
 #define NICE_MIN -20
 #define NICE_MAX 20
+#define NICE_INITIAL 0
+
+#define LOAD_AVG_INITIAL 0
 
 /* A kernel thread or user process.
 

@@ -13,14 +13,14 @@ int_to_fp (int n)
 }
 
 /* Converts fixed point to integer. Rounding toward 0 (floor). */
-inline fixed_point_t
+inline int
 fp_to_int_round_0 (fixed_point_t x)
 {
   return x / BINARY_POINT;
 }
 
 /* Converts fixed point to integer. Rounding to nearest. */
-inline fixed_point_t
+inline int
 fp_to_int_round_nearest (fixed_point_t x)
 {
   if (x >= 0)
