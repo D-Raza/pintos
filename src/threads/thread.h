@@ -25,7 +25,7 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
-/* Maximum and minimum values of nice */
+/* Maximum, minimum, and initial values of nice */
 #define NICE_MIN -20
 #define NICE_MAX 20
 #define NICE_INITIAL 0
@@ -97,7 +97,7 @@ struct thread
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
     int nice;                           /* Nice value. */
-    fixed_point_t recent_cpu;           /* Recent CPU value. */
+    fixed_point_t recent_cpu;           /* Measure of recent CPU usage. */
     struct list_elem allelem;           /* List element for all threads list. */
 
     /* Shared between thread.c and synch.c. */

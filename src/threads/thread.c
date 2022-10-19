@@ -154,21 +154,21 @@ thread_tick (void)
     else
       kernel_ticks++;
 
+
   if (thread_mlfqs) {
-    if (t->status == THREAD_RUNNING) // && t != idle_thread)
+
+    /* recent_cpu increments by 1 every timer tick for the running thread. */
+    if (t->status == THREAD_RUNNING)
       t->recent_cpu = add_fp_int (t->recent_cpu, 1);
 
+    /* Load average and recent_cpu values are to be updated every second. */
     if (timer_ticks () % TIMER_FREQ == 0) {
       recalc_load_avg ();
-      // recalc_recent_cpu (t, NULL);
       thread_foreach (recalc_recent_cpu, NULL);
     }
 
-    /* "... recalculated (if necessary) on every fourth clock tick.""
-     * What is meant by "if necessary"? 
-     */
+    /* Priorities are to be updated every 4th tick. */
     if (timer_ticks () % TIME_SLICE == 0) {
-      // mlfqs_update_priority (t, NULL);
       thread_foreach (mlfqs_update_priority, NULL);
       priority_yield ();
     }
@@ -530,20 +530,23 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
 
   if (thread_mlfqs) {
+
+    /* Initial thread should have nice and load average values of 0. */
     if (t == initial_thread) {
       load_avg = LOAD_AVG_INITIAL;
       t->nice = NICE_INITIAL;
-      // t->recent_cpu = 0;
       recalc_recent_cpu (t, NULL);
     } 
+
+    /* All other threads should inherit their parent's (current thread) nice values */
     else {
       struct thread *cur = thread_current ();
       t->nice = cur->nice;
-      // t->recent_cpu = cur->recent_cpu;
       recalc_recent_cpu (t, NULL);
     }
     mlfqs_update_priority (t, NULL);
   }
+
   else
     t->priority = priority;
   
@@ -668,7 +671,7 @@ allocate_tid (void)
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
-/* Ensures nice value is well bound */
+/* Ensures nice value is bound between -20 and 20. */
 static 
 int bound_nice (int nice) {
   if (nice > NICE_MAX) 
@@ -679,7 +682,8 @@ int bound_nice (int nice) {
     return nice;
 }
 
-/* Recalculates load average */
+/* Recalculates load average with the formula 
+   load_avg = (59/60) * load_avg + (1/60) * ready_threads */
 static void 
 recalc_load_avg (void) {
   fixed_point_t coeff1 = divide_fp_int (int_to_fp(59), 60);
@@ -690,7 +694,8 @@ recalc_load_avg (void) {
   load_avg = add_fp (multiply_fp (coeff1, load_avg), multiply_fp_int (coeff2, ready_threads));
 }
 
-/* Recalculate recent_cpu */
+/* Recalculate recent_cpu with the formula 
+   recent_cpu = (2 * load_avg) / (2 * load_avg + 1) * recent_cpu + nice */
 static void
 recalc_recent_cpu (struct thread *t, void *aux UNUSED) {
   fixed_point_t two_load_avg = multiply_fp_int (load_avg, 2);
@@ -698,7 +703,8 @@ recalc_recent_cpu (struct thread *t, void *aux UNUSED) {
   t->recent_cpu = add_fp_int (multiply_fp (coeff1, t->recent_cpu), t->nice);
 }
 
-/* Recalculates priority of thread */
+/* Recalculates priority of thread t with the formula 
+   priority = PRI_MAX - (recent_cpu / 4) - (nice * 2) */
 static int
 recalc_priority (struct thread *t) {
   int new_p = PRI_MAX - fp_to_int_round_0 (divide_fp_int (t->recent_cpu, 4)) - t->nice * 2;
@@ -715,6 +721,7 @@ mlfqs_update_priority (struct thread *t, void *aux UNUSED) {
   t->priority = recalc_priority (t);
 }
 
+/* Compares the priorities of two threads. */
 static bool
 thread_priority_higher (const struct list_elem *l1_raw, const struct list_elem *l2_raw, void *aux UNUSED) {
   struct thread *t1 = list_entry (l1_raw, struct thread, elem);
@@ -722,7 +729,7 @@ thread_priority_higher (const struct list_elem *l1_raw, const struct list_elem *
   return t1->priority > t2->priority;
 }
 
-/* If the running thread is not the highest priority, yield. */
+/* Yields the CPU if the current thread is not the highest priority thread */
 static void 
 priority_yield (void) {
   enum intr_level old_level = intr_disable ();
