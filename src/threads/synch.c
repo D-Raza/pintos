@@ -119,7 +119,7 @@ sema_up (struct semaphore *sema)
   if (!list_empty (&sema->waiters))
   {
     struct list_elem *max_thread = 
-	    list_max (&sema->waiters, &priority_less, NULL);
+	    list_min (&sema->waiters, &thread_priority_higher, NULL);
     list_remove (max_thread); 
     thread_unblock (list_entry (max_thread, struct thread, elem));
   }
@@ -367,11 +367,11 @@ semaphore_less (const struct list_elem *a,
   int priority_b = PRI_MIN;
   if (!list_empty (waiters_a))
     priority_a = list_entry (
-	list_max (waiters_a, priority_less, NULL),
+	list_min (waiters_a, thread_priority_higher, NULL),
         struct thread, elem)->priority;
   if (!list_empty (waiters_b))
     priority_b = list_entry (
-	list_max (waiters_b, priority_less, NULL), 
+	list_min (waiters_b, thread_priority_higher, NULL), 
 	struct thread, elem)->priority;
-  return priority_a <= priority_b;
+  return priority_a < priority_b;
 }
