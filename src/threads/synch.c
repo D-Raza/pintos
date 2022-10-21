@@ -32,6 +32,9 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 
+static bool semaphore_less (const struct list_elem *a,
+                const struct list_elem *b, void *aux UNUSED);
+
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
    manipulating it:
@@ -113,11 +116,19 @@ sema_up (struct semaphore *sema)
   ASSERT (sema != NULL);
 
   old_level = intr_disable ();
-  if (!list_empty (&sema->waiters)) 
-    thread_unblock (list_entry (list_pop_front (&sema->waiters),
-                                struct thread, elem));
+  if (!list_empty (&sema->waiters))
+  {
+    struct list_elem *max_thread = 
+	    list_min (&sema->waiters, &thread_priority_higher, NULL);
+    list_remove (max_thread); 
+    thread_unblock (list_entry (max_thread, struct thread, elem));
+  }
   sema->value++;
   intr_set_level (old_level);
+  if (intr_context ())
+    intr_yield_on_return();
+  else
+    thread_yield ();
 }
 
 static void sema_test_helper (void *sema_);
@@ -317,8 +328,13 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   ASSERT (lock_held_by_current_thread (lock));
 
   if (!list_empty (&cond->waiters)) 
-    sema_up (&list_entry (list_pop_front (&cond->waiters),
-                          struct semaphore_elem, elem)->semaphore);
+  {
+    struct list_elem *max_elem = 
+	    list_max (&cond->waiters, semaphore_less, NULL);
+    list_remove (max_elem);
+    sema_up (&list_entry (max_elem, struct semaphore_elem, elem)
+	    ->semaphore);
+  }
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by
@@ -335,4 +351,27 @@ cond_broadcast (struct condition *cond, struct lock *lock)
 
   while (!list_empty (&cond->waiters))
     cond_signal (cond, lock);
+}
+
+/* List less func for comparing semaphore elems by maximum 
+   priority in their waiters */
+static bool
+semaphore_less (const struct list_elem *a, 
+		const struct list_elem *b, void *aux UNUSED)
+{
+  struct list *waiters_a = &list_entry (
+	a, struct semaphore_elem, elem)->semaphore.waiters;
+  struct list *waiters_b = &list_entry (
+        b, struct semaphore_elem, elem)->semaphore.waiters;
+  int priority_a = PRI_MIN;
+  int priority_b = PRI_MIN;
+  if (!list_empty (waiters_a))
+    priority_a = list_entry (
+	list_min (waiters_a, thread_priority_higher, NULL),
+        struct thread, elem)->priority;
+  if (!list_empty (waiters_b))
+    priority_b = list_entry (
+	list_min (waiters_b, thread_priority_higher, NULL), 
+	struct thread, elem)->priority;
+  return priority_a < priority_b;
 }
