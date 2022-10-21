@@ -752,12 +752,22 @@ priority_yield (void) {
   intr_set_level (old_level);
 }
 
-void thread_donate_priority (struct thread *t) {
+void thread_donate_priority (struct thread *t, int new_priority) {
   return;
   // TODO
 }
 
 void thread_calc_donate_priority (void) {
-  return;
-  // TODO
+  struct list_elem *elem, *next;
+  struct thread *t = thread_current ();
+  elem = list_begin (&t -> donors);
+  while ((next = list_next (elem)) != list_end (&t -> donors))
+  {
+    const struct lock *lock = list_entry (elem, struct lock, elem);
+    int max_priority = list_entry (list_max (lock->semaphore->waiters, thread_priority_higher, NULL),
+		    struct thread, elem) -> priority;
+    if (max_priority > t->priority)
+      thread_donate_priority (t, max_priority);
+    elem = list_next (elem);
+  }
 }
