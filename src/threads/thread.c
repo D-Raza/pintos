@@ -385,7 +385,9 @@ void
 thread_set_priority (int new_priority) 
 { 
   if (!thread_mlfqs) {
-    thread_current ()->priority = new_priority;
+    struct thread *cur = thread_current ();
+    cur->base_priority = new_priority;
+    cur->priority = cur->priority >= new_priority ? cur->priority : new_priority; 
     thread_yield ();
   }
 }
@@ -547,9 +549,11 @@ init_thread (struct thread *t, const char *name, int priority)
     mlfqs_update_priority (t, NULL);
   }
 
-  else
+  else {
     t->priority = priority;
-  
+    t->base_priority = priority; 
+    list_init (&t->donors);
+  }
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
@@ -749,9 +753,11 @@ priority_yield (void) {
 }
 
 void thread_donate_priority (struct thread *t) {
+  return;
   // TODO
 }
 
-void thread_calc_donate_priority () {
+void thread_calc_donate_priority (void) {
+  return;
   // TODO
 }
