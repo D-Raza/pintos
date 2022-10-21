@@ -79,7 +79,6 @@ static void recalc_load_avg (void);
 static void recalc_recent_cpu (struct thread *t, void *aux UNUSED);
 static int recalc_priority (struct thread *t);
 static void mlfqs_update_priority (struct thread *t, void *aux UNUSED);
-static bool thread_priority_higher (const struct list_elem *l1_raw, const struct list_elem *l2_raw, void *aux UNUSED);
 static void priority_yield (void);
 
 /* Initializes the threading system by transforming the code
@@ -287,7 +286,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_insert_ordered (&ready_list, &t->elem, thread_priority_higher, NULL);
+      list_push_back(&ready_list, &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -358,7 +357,7 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_insert_ordered (&ready_list, &cur->elem, thread_priority_higher, NULL);
+    list_push_back(&ready_list, &cur->elem);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -387,6 +386,7 @@ thread_set_priority (int new_priority)
 { 
   if (!thread_mlfqs) {
     thread_current ()->priority = new_priority;
+    thread_yield ();
   }
 }
 
@@ -583,7 +583,7 @@ next_thread_to_run (void)
   else
   {
     struct list_elem *max_elem = 
-	    list_max (&ready_list, priority_less, NULL);
+	    list_min (&ready_list, thread_priority_higher, NULL);
     list_remove (max_elem);
     return list_entry (max_elem, struct thread, elem);
   }
@@ -728,7 +728,7 @@ mlfqs_update_priority (struct thread *t, void *aux UNUSED) {
 }
 
 /* Compares the priorities of two threads. */
-static bool
+bool
 thread_priority_higher (const struct list_elem *l1_raw, const struct list_elem *l2_raw, void *aux UNUSED) {
   struct thread *t1 = list_entry (l1_raw, struct thread, elem);
   struct thread *t2 = list_entry (l2_raw, struct thread, elem);
@@ -739,19 +739,11 @@ thread_priority_higher (const struct list_elem *l1_raw, const struct list_elem *
 static void 
 priority_yield (void) {
   enum intr_level old_level = intr_disable ();
-  if (!list_empty (&ready_list) && thread_current ()->priority < list_entry (list_front (&ready_list), struct thread, elem)->priority) {
+  if (!list_empty (&ready_list) && thread_current ()->priority < next_thread_to_run()->priority) {
     if (intr_context ())
       intr_yield_on_return ();
     else
       thread_yield ();
   }
   intr_set_level (old_level);
-}
-  
-bool 
-priority_less (const struct list_elem *thread1, 
-		const struct list_elem *thread2, void *aux UNUSED){
-  const struct thread *t1 = list_entry (thread1, struct thread, elem);
-  const struct thread *t2 = list_entry (thread2, struct thread, elem);
-  return t1->priority <= t2 -> priority;
 }
