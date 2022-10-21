@@ -32,6 +32,8 @@ typedef int tid_t;
 
 #define LOAD_AVG_INITIAL 0
 
+#define MAX_DONATION_DEPTH 8
+
 /* A kernel thread or user process.
 
    Each thread structure is stored in its own 4 kB page.  The
@@ -95,10 +97,13 @@ struct thread
     enum thread_status status;          /* Thread state. */
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
+    int base_priority;                  /* Base priority of the thread. */
     int priority;                       /* Priority. */
     int nice;                           /* Nice value. */
     fixed_point_t recent_cpu;           /* Measure of recent CPU usage. */
     struct list_elem allelem;           /* List element for all threads list. */
+    struct lock *recipient;            
+    struct list donors;
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
