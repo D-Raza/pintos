@@ -747,3 +747,11 @@ priority_yield (void) {
   }
   intr_set_level (old_level);
 }
+
+void thread_donate_priority (struct thread *t) {
+  // TODO
+}
+
+void thread_calc_donate_priority () {
+  // TODO
+}
