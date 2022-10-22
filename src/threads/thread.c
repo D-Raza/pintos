@@ -752,22 +752,30 @@ priority_yield (void) {
   intr_set_level (old_level);
 }
 
-void thread_donate_priority (struct thread *t, int new_priority) {
-  return;
-  // TODO
+/* DRAFT: Recursive implementation. */
+void thread_donate_priority (struct thread *t) {
+  ASSERT (!thread_mlfqs);
+
+  struct list_elem *e;
+  int max_priority = PRI_MIN;
+
+  for (e = list_begin (&t->donors); e != list_end (&t->donors) && !list_empty (&t->donors); e = list_next (e)) {
+    struct list waiters = list_entry (e, struct lock, elem)->semaphore.waiters;
+    if (!list_empty (&waiters)) {
+      int max_waiter_priority = list_entry (list_max (&waiters, thread_priority_higher, NULL), struct thread, elem)->priority;
+      max_priority = max_waiter_priority > max_priority ? max_waiter_priority : max_priority;
+    }
+  }
+  
+  t->priority = max_priority > t->priority ? max_priority : t->priority;
+
+  if (t->recipient != NULL) {
+    thread_donate_priority (t->recipient->holder);
+  }
+
 }
 
 void thread_calc_donate_priority (void) {
-  struct list_elem *elem, *next;
-  struct thread *t = thread_current ();
-  elem = list_begin (&t -> donors);
-  while ((next = list_next (elem)) != list_end (&t -> donors))
-  {
-    const struct lock *lock = list_entry (elem, struct lock, elem);
-    int max_priority = list_entry (list_max (lock->semaphore->waiters, thread_priority_higher, NULL),
-		    struct thread, elem) -> priority;
-    if (max_priority > t->priority)
-      thread_donate_priority (t, max_priority);
-    elem = list_next (elem);
-  }
+  return;
+  // TODO
 }
