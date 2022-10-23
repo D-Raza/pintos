@@ -385,9 +385,10 @@ void
 thread_set_priority (int new_priority) 
 { 
   if (!thread_mlfqs) {
-    struct thread *cur = thread_current ();
-    cur->base_priority = new_priority;
-    cur->priority = cur->priority >= new_priority ? cur->priority : new_priority; 
+    enum intr_level old_level = intr_disable ();
+    thread_current ()->base_priority = new_priority;
+    thread_calc_donate_priority ();
+    intr_set_level (old_level);
     thread_yield ();
   }
 }
@@ -786,16 +787,19 @@ void thread_donate_priority (struct thread *t, int new_priority) {
 
 void thread_calc_donate_priority (void) {
   struct thread *t = thread_current ();
-  int max_priority = PRI_MIN;
+  ASSERT (is_thread (t));
+  int max_priority = t->base_priority;
   struct list_elem *e;
-  for (e = list_begin (&t->donors); e != list_end (&t->donors) && !list_empty (&t->donors); e = list_next (e)) {
+  for (e = list_begin (&t->donors); e != list_end (&t->donors); e = list_next (e))
+  {
     struct list waiters = list_entry (e, struct lock, elem)->semaphore.waiters;
-    if (!list_empty (&waiters)) {
-      int max_waiter_priority = list_entry (list_max (&waiters, thread_priority_higher, NULL), struct thread, elem)->priority;      max_priority = max_waiter_priority > max_priority ? max_waiter_priority : max_priority;
+    if (!list_empty (&waiters)) 
+    {
+      struct list_elem *max_elem = list_min (&waiters, thread_priority_higher, NULL); 
+      int max_waiter_priority = list_entry (max_elem, struct thread, elem)->priority;
+      max_priority = max_waiter_priority > max_priority ? max_waiter_priority : max_priority;
     }
   }
-
-  t->priority = max_priority > t->base_priority ? max_priority : t->base_priority;
-	
-	return;
+  t->priority = max_priority;
+  return;
 }
