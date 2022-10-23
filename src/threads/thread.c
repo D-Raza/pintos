@@ -752,30 +752,44 @@ priority_yield (void) {
   intr_set_level (old_level);
 }
 
-/* DRAFT: Recursive implementation. */
-void thread_donate_priority (struct thread *t) {
+/* Updates the thread's effective priority to new priority 
+   if bigger than the old effective priority. If the thread is blocked 
+   on a lock it loops over the lock's holder up do MAX_DONATION_DEPTH times */
+void thread_donate_priority (struct thread *t, int new_priority) {
   ASSERT (!thread_mlfqs);
 
-  struct list_elem *e;
-  int max_priority = PRI_MIN;
+  for (int i=0; i<MAX_DONATION_DEPTH; i++) 
+  {
+    if (t != NULL && new_priority > t->priority) 
+    {
+      t->priority = new_priority;
+      if (t->recipient != NULL) 
+      {
+        t = t->recipient->holder;
+      }
+      else
+        break;
+    } 
+    else
+     break;    
+  }
+}
 
+/* Re-calculates the current thread's priority, by finding the 
+   maximum priority of the waiters for each held lock and its base priority*/
+
+void thread_calc_donate_priority (void) {
+  struct thread *t = thread_current ();
+  int max_priority = PRI_MIN;
+  struct list_elem *e;
   for (e = list_begin (&t->donors); e != list_end (&t->donors) && !list_empty (&t->donors); e = list_next (e)) {
     struct list waiters = list_entry (e, struct lock, elem)->semaphore.waiters;
     if (!list_empty (&waiters)) {
-      int max_waiter_priority = list_entry (list_max (&waiters, thread_priority_higher, NULL), struct thread, elem)->priority;
-      max_priority = max_waiter_priority > max_priority ? max_waiter_priority : max_priority;
+      int max_waiter_priority = list_entry (list_max (&waiters, thread_priority_higher, NULL), struct thread, elem)->priority;      max_priority = max_waiter_priority > max_priority ? max_waiter_priority : max_priority;
     }
   }
-  
-  t->priority = max_priority > t->priority ? max_priority : t->priority;
 
-  if (t->recipient != NULL) {
-    thread_donate_priority (t->recipient->holder);
-  }
-
-}
-
-void thread_calc_donate_priority (void) {
-  return;
-  // TODO
+  t->priority = max_priority > t->base_priority ? max_priority : t->base_priority;
+	
+	return;
 }
