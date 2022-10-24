@@ -764,13 +764,12 @@ priority_yield (void) {
    on a lock it loops over the lock's holder up do MAX_DONATION_DEPTH times */
 void thread_donate_priority (struct thread *t, int new_priority) {
   ASSERT (!thread_mlfqs);
-
   for (int i=0; i<MAX_DONATION_DEPTH; i++) 
   {
     if (t != NULL && new_priority > t->priority) 
     {
       t->priority = new_priority;
-      if (t->recipient != NULL) 
+      if (t->recipient != NULL && t->recipient->holder != t) 
       {
         t = t->recipient->holder;
       }
@@ -778,7 +777,7 @@ void thread_donate_priority (struct thread *t, int new_priority) {
         break;
     } 
     else
-     break;    
+     break;
   }
 }
 
