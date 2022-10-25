@@ -154,26 +154,27 @@ thread_tick (void)
       kernel_ticks++;
 
 
-  if (thread_mlfqs) {
+  if (thread_mlfqs) 
+    {
 
-    /* recent_cpu increments by 1 every timer tick for the running thread. */
-    if (t->status == THREAD_RUNNING)
-      t->recent_cpu = add_fp_int (t->recent_cpu, 1);
+      /* recent_cpu increments by 1 every timer tick for the running thread. */
+      if (t->status == THREAD_RUNNING)
+        t->recent_cpu = add_fp_int (t->recent_cpu, 1);
 
-    /* Load average and recent_cpu values are to be updated every second. */
-    if (timer_ticks () % TIMER_FREQ == 0) 
-      {
-        recalc_load_avg ();
-        thread_foreach (recalc_recent_cpu, NULL);
-      }
+      /* Load average and recent_cpu values are to be updated every second. */
+      if (timer_ticks () % TIMER_FREQ == 0) 
+        {
+          recalc_load_avg ();
+          thread_foreach (recalc_recent_cpu, NULL);
+        }
 
-    /* Priorities are to be updated every 4th tick. */
-    if (timer_ticks () % TIME_SLICE == 0) 
-      {
-        thread_foreach (mlfqs_update_priority, NULL);
-        priority_yield ();
-      }
-  }
+      /* Priorities are to be updated every 4th tick. */
+      if (timer_ticks () % TIME_SLICE == 0) 
+        {
+          thread_foreach (mlfqs_update_priority, NULL);
+          priority_yield ();
+        }
+    }
 
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
