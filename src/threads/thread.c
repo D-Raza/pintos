@@ -446,7 +446,8 @@ int
 thread_get_recent_cpu (void) 
 {
   ASSERT(thread_mlfqs);
-  return fp_to_int_round_nearest (multiply_fp_int (thread_current()->recent_cpu, 100));
+  return fp_to_int_round_nearest (multiply_fp_int 
+         (thread_current()->recent_cpu, 100));
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -546,7 +547,8 @@ init_thread (struct thread *t, const char *name, int priority)
           recalc_recent_cpu (t, NULL);
         } 
 
-    /* All other threads should inherit their parent's (current thread) nice values */
+    /* All other threads should inherit their parent's (current thread) 
+       nice values */
       else 
         {
           struct thread *cur = thread_current ();
@@ -712,7 +714,8 @@ recalc_load_avg (void) {
   int ready_threads = threads_ready ();
   if (thread_current () != idle_thread)
     ready_threads++; 
-  load_avg = add_fp (multiply_fp (coeff1, load_avg), multiply_fp_int (coeff2, ready_threads));
+  load_avg = add_fp (multiply_fp (coeff1, load_avg), 
+    multiply_fp_int (coeff2, ready_threads));
 }
 
 /* Recalculate recent_cpu with the formula 
@@ -728,7 +731,8 @@ recalc_recent_cpu (struct thread *t, void *aux UNUSED) {
    priority = PRI_MAX - (recent_cpu / 4) - (nice * 2) */
 static int
 recalc_priority (struct thread *t) {
-  int new_p = PRI_MAX - fp_to_int_round_0 (divide_fp_int (t->recent_cpu, 4)) - t->nice * 2;
+  int new_p = PRI_MAX - fp_to_int_round_0 (divide_fp_int 
+    (t->recent_cpu, 4)) - t->nice * 2;
 
   /* Ensure priority is bound between PRI_MIN and PRI_MAX. */
   if (new_p > PRI_MAX)
@@ -746,19 +750,24 @@ mlfqs_update_priority (struct thread *t, void *aux UNUSED) {
 
 /* Compares the priorities of two threads. */
 bool
-thread_priority_higher (const struct list_elem *l1_raw, const struct list_elem *l2_raw, void *aux UNUSED) {
+thread_priority_higher (const struct list_elem *l1_raw, 
+		        const struct list_elem *l2_raw, void *aux UNUSED) 
+{
   struct thread *t1 = list_entry (l1_raw, struct thread, elem);
   struct thread *t2 = list_entry (l2_raw, struct thread, elem);
-  return t1->priority > t2->priority;
+  return t1->priority < t2->priority;
 }
 
-/* Yields the CPU if the current thread is not the highest priority thread */
+/* Yields the CPU if the current thread is not the highest priority
+   thread */
 static void 
-priority_yield (void) {
+priority_yield (void) 
+{
   enum intr_level old_level = intr_disable ();
   if (!list_empty (&ready_list))
     {
-      struct list_elem *max_elem = list_min (&ready_list, thread_priority_higher, NULL);
+      struct list_elem *max_elem = list_min (&ready_list, 
+	thread_priority_higher, NULL);
       struct thread *t = list_entry (max_elem, struct thread, elem);
       if (thread_current ()->priority <= t->priority)
         {
@@ -789,12 +798,13 @@ void thread_donate_priority (struct thread *t, int new_priority) {
         break;  
         } 
       else
-      break;
+        break;
     }
 }
 
 /* Re-calculates the current thread's priority, by finding the 
-   maximum priority of the waiters for each held lock and its base priority*/
+   maximum priority of the waiters for each held lock and its 
+   base priority */
 
 void thread_calc_donate_priority (void) {
   struct thread *t = thread_current ();
@@ -804,14 +814,18 @@ void thread_calc_donate_priority (void) {
   if (!list_empty (&t->donors)) 
     {
       struct list_elem *e;
-      for (e = list_begin (&t->donors); e != list_end (&t->donors); e = list_next (e)) 
+      for (e = list_begin (&t->donors); 
+	e != list_end (&t->donors); 
+	e = list_next (e)) 
         {
-
-          struct list *waiters = &list_entry (e, struct lock, elem)->semaphore.waiters;
+          struct list *waiters = &list_entry (e, struct lock, elem)
+	    ->semaphore.waiters;
     
           if (!list_empty (waiters)) 
             {
-              int max_waiter_priority = list_entry (list_min (waiters, thread_priority_higher, NULL), struct thread, elem)->priority;
+              int max_waiter_priority = list_entry (list_min 
+		(waiters, thread_priority_higher, NULL), 
+		struct thread, elem)->priority;
               if (max_waiter_priority > max_priority)
                 max_priority = max_waiter_priority;
             }
