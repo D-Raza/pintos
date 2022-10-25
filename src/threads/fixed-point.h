@@ -13,7 +13,7 @@ int_to_fp (int n)
 }
 
 /* Converts fixed point x to integer. 
- * Rounding towards 0 (floor). */
+   Rounding towards 0 (floor). */
 inline int
 fp_to_int_round_0 (fixed_point_t x)
 {
@@ -21,7 +21,7 @@ fp_to_int_round_0 (fixed_point_t x)
 }
 
 /* Converts fixed point to integer. 
- * Rounding to nearest integer. */
+   Rounding to nearest integer. */
 inline int
 fp_to_int_round_nearest (fixed_point_t x)
 {
@@ -39,7 +39,7 @@ add_fp (fixed_point_t x, fixed_point_t y)
 }
 
 /* Subtracts fixed point number y 
- * from fixed point number x. */
+   from fixed point number x. */
 inline fixed_point_t
 subtract_fp (fixed_point_t x, fixed_point_t y)
 {
