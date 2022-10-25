@@ -692,7 +692,8 @@ uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
 /* Ensures nice value is bound between -20 and 20. */
 static 
-int bound_nice (int nice) {
+int bound_nice (int nice) 
+{
   if (nice > NICE_MAX) 
     return NICE_MAX;
   else if (nice < NICE_MIN) 
@@ -704,7 +705,8 @@ int bound_nice (int nice) {
 /* Recalculates load average with the formula 
    load_avg = (59/60) * load_avg + (1/60) * ready_threads */
 static void 
-recalc_load_avg (void) {
+recalc_load_avg (void) 
+{
   fixed_point_t coeff1 = divide_fp_int (int_to_fp(59), 60);
   fixed_point_t coeff2 = divide_fp_int(int_to_fp(1), 60);
   int ready_threads = threads_ready ();
@@ -717,7 +719,8 @@ recalc_load_avg (void) {
 /* Recalculate recent_cpu with the formula 
    recent_cpu = (2 * load_avg) / (2 * load_avg + 1) * recent_cpu + nice */
 static void
-recalc_recent_cpu (struct thread *t, void *aux UNUSED) {
+recalc_recent_cpu (struct thread *t, void *aux UNUSED) 
+{
   fixed_point_t two_load_avg = multiply_fp_int (load_avg, 2);
   fixed_point_t coeff1 = divide_fp (two_load_avg, add_fp_int (two_load_avg, 1));
   t->recent_cpu = add_fp_int (multiply_fp (coeff1, t->recent_cpu), t->nice);
@@ -726,7 +729,8 @@ recalc_recent_cpu (struct thread *t, void *aux UNUSED) {
 /* Recalculates priority of thread t with the formula 
    priority = PRI_MAX - (recent_cpu / 4) - (nice * 2) */
 static int
-recalc_priority (struct thread *t) {
+recalc_priority (struct thread *t) 
+{
   int new_p = PRI_MAX - fp_to_int_round_0 (divide_fp_int 
     (t->recent_cpu, 4)) - t->nice * 2;
 
@@ -740,7 +744,8 @@ recalc_priority (struct thread *t) {
 
 /* Updates priority of mlfqs threads */
 static void
-mlfqs_update_priority (struct thread *t, void *aux UNUSED) {
+mlfqs_update_priority (struct thread *t, void *aux UNUSED) 
+{
   t->priority = recalc_priority (t);
 }
 
@@ -778,7 +783,8 @@ priority_yield (void)
 /* Updates the thread's effective priority to new priority 
    if bigger than the old effective priority. If the thread is blocked 
    on a lock it loops over the lock's holder up do MAX_DONATION_DEPTH times */
-void thread_donate_priority (struct thread *t, int new_priority) {
+void thread_donate_priority (struct thread *t, int new_priority) 
+{
   ASSERT (!thread_mlfqs);
   for (int i = 0; i < MAX_DONATION_DEPTH; i++) 
     {
@@ -804,7 +810,8 @@ void thread_donate_priority (struct thread *t, int new_priority) {
    maximum priority of the waiters for each held lock and its 
    base priority */
 
-void thread_calc_donate_priority (void) {
+void thread_calc_donate_priority (void) 
+{
   struct thread *t = thread_current (); 
   t->priority = t->base_priority;
   int max_priority = t->base_priority;
