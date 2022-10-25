@@ -790,12 +790,10 @@ void thread_donate_priority (struct thread *t, int new_priority) {
       if (t != NULL && new_priority > t->priority) 
         {
           t->priority = new_priority;
-      if (t->recipient != NULL && t->recipient->holder != t) 
-        {
-          t = t->recipient->holder;
-        }
-      else
-        break;  
+          if (t->recipient != NULL && t->recipient->holder != t) 
+              t = t->recipient->holder;
+          else
+            break;  
         } 
       else
         break;
