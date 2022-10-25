@@ -161,16 +161,18 @@ thread_tick (void)
       t->recent_cpu = add_fp_int (t->recent_cpu, 1);
 
     /* Load average and recent_cpu values are to be updated every second. */
-    if (timer_ticks () % TIMER_FREQ == 0) {
-      recalc_load_avg ();
-      thread_foreach (recalc_recent_cpu, NULL);
-    }
+    if (timer_ticks () % TIMER_FREQ == 0) 
+      {
+        recalc_load_avg ();
+        thread_foreach (recalc_recent_cpu, NULL);
+      }
 
     /* Priorities are to be updated every 4th tick. */
-    if (timer_ticks () % TIME_SLICE == 0) {
-      thread_foreach (mlfqs_update_priority, NULL);
-      priority_yield ();
-    }
+    if (timer_ticks () % TIME_SLICE == 0) 
+      {
+        thread_foreach (mlfqs_update_priority, NULL);
+        priority_yield ();
+      }
   }
 
   /* Enforce preemption. */
@@ -384,13 +386,14 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 { 
-  if (!thread_mlfqs) {
-    enum intr_level old_level = intr_disable ();
-    thread_current ()->base_priority = new_priority;
-    thread_calc_donate_priority ();
-    intr_set_level (old_level);
-    thread_yield ();
-  }
+  if (!thread_mlfqs) 
+    {
+      enum intr_level old_level = intr_disable ();
+      thread_current ()->base_priority = new_priority;
+      thread_calc_donate_priority ();
+      intr_set_level (old_level);
+      thread_yield ();
+    }
 }
 
 /* Returns the current thread's priority. */
@@ -532,30 +535,34 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
 
-  if (thread_mlfqs) {
+  if (thread_mlfqs) 
+    {
 
     /* Initial thread should have nice and load average values of 0. */
-    if (t == initial_thread) {
-      load_avg = LOAD_AVG_INITIAL;
-      t->nice = NICE_INITIAL;
-      recalc_recent_cpu (t, NULL);
-    } 
+      if (t == initial_thread) 
+        {
+          load_avg = LOAD_AVG_INITIAL;
+          t->nice = NICE_INITIAL;
+          recalc_recent_cpu (t, NULL);
+        } 
 
     /* All other threads should inherit their parent's (current thread) nice values */
-    else {
-      struct thread *cur = thread_current ();
-      t->nice = cur->nice;
-      recalc_recent_cpu (t, NULL);
+      else 
+        {
+          struct thread *cur = thread_current ();
+          t->nice = cur->nice;
+          recalc_recent_cpu (t, NULL);
+        }
+      mlfqs_update_priority (t, NULL);
     }
-    mlfqs_update_priority (t, NULL);
-  }
 
-  else {
-    t->priority = priority;
-    t->base_priority = priority;
-    list_init (&t->donors);
-    t->recipient = NULL; 
-  }
+  else 
+    {
+      t->priority = priority;
+      t->base_priority = priority;
+      list_init (&t->donors);
+      t->recipient = NULL; 
+    }
 
   
   t->magic = THREAD_MAGIC;
@@ -589,12 +596,12 @@ next_thread_to_run (void)
   if (list_empty (&ready_list))
     return idle_thread;
   else
-  {
-    struct list_elem *max_elem = 
-	    list_min (&ready_list, thread_priority_higher, NULL);
-    list_remove (max_elem);
-    return list_entry (max_elem, struct thread, elem);
-  }
+    {
+      struct list_elem *max_elem = 
+	      list_min (&ready_list, thread_priority_higher, NULL);
+      list_remove (max_elem);
+      return list_entry (max_elem, struct thread, elem);
+    }
 }
 
 
@@ -722,6 +729,8 @@ recalc_recent_cpu (struct thread *t, void *aux UNUSED) {
 static int
 recalc_priority (struct thread *t) {
   int new_p = PRI_MAX - fp_to_int_round_0 (divide_fp_int (t->recent_cpu, 4)) - t->nice * 2;
+
+  /* Ensure priority is bound between PRI_MIN and PRI_MAX. */
   if (new_p > PRI_MAX)
     new_p = PRI_MAX;
   else if (new_p < PRI_MIN)
@@ -748,17 +757,17 @@ static void
 priority_yield (void) {
   enum intr_level old_level = intr_disable ();
   if (!list_empty (&ready_list))
-  {
-    struct list_elem *max_elem = list_min (&ready_list, thread_priority_higher, NULL);
-    struct thread *t = list_entry (max_elem, struct thread, elem);
-    if (thread_current ()->priority <= t->priority)
     {
-      if (intr_context ())
-        intr_yield_on_return ();
-      else
-        thread_yield ();
+      struct list_elem *max_elem = list_min (&ready_list, thread_priority_higher, NULL);
+      struct thread *t = list_entry (max_elem, struct thread, elem);
+      if (thread_current ()->priority <= t->priority)
+        {
+          if (intr_context ())
+            intr_yield_on_return ();
+          else
+            thread_yield ();
+        }
     }
-  }
   intr_set_level (old_level);
 }
 
@@ -768,20 +777,20 @@ priority_yield (void) {
 void thread_donate_priority (struct thread *t, int new_priority) {
   ASSERT (!thread_mlfqs);
   for (int i = 0; i < MAX_DONATION_DEPTH; i++) 
-  {
-    if (t != NULL && new_priority > t->priority) 
     {
-      t->priority = new_priority;
+      if (t != NULL && new_priority > t->priority) 
+        {
+          t->priority = new_priority;
       if (t->recipient != NULL && t->recipient->holder != t) 
-      {
-        t = t->recipient->holder;
-      }
+        {
+          t = t->recipient->holder;
+        }
       else
         break;  
-    } 
-    else
-     break;
-  }
+        } 
+      else
+      break;
+    }
 }
 
 /* Re-calculates the current thread's priority, by finding the 
@@ -789,22 +798,24 @@ void thread_donate_priority (struct thread *t, int new_priority) {
 
 void thread_calc_donate_priority (void) {
   struct thread *t = thread_current ();
-  ASSERT (is_thread (t));
   t->priority = t->base_priority;
   int max_priority = t->base_priority;
 
-  if (!list_empty (&t->donors)) {
-    struct list_elem *e;
-    for (e = list_begin (&t->donors); e != list_end (&t->donors); e = list_next (e)) {
+  if (!list_empty (&t->donors)) 
+    {
+      struct list_elem *e;
+      for (e = list_begin (&t->donors); e != list_end (&t->donors); e = list_next (e)) 
+        {
 
-      struct list *waiters = &list_entry (e, struct lock, elem)->semaphore.waiters;
+          struct list *waiters = &list_entry (e, struct lock, elem)->semaphore.waiters;
     
-      if (!list_empty (waiters)) {
-        int max_waiter_priority = list_entry (list_min (waiters, thread_priority_higher, NULL), struct thread, elem)->priority;
-        if (max_waiter_priority > max_priority)
-          max_priority = max_waiter_priority;
-      }
+          if (!list_empty (waiters)) 
+            {
+              int max_waiter_priority = list_entry (list_min (waiters, thread_priority_higher, NULL), struct thread, elem)->priority;
+              if (max_waiter_priority > max_priority)
+                max_priority = max_waiter_priority;
+            }
+        }
     }
-  }
   t->priority = max_priority;
 }
