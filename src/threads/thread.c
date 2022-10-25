@@ -552,9 +552,12 @@ init_thread (struct thread *t, const char *name, int priority)
 
   else {
     t->priority = priority;
-    t->base_priority = priority; 
+    t->base_priority = priority;
     list_init (&t->donors);
+    t->recipient = NULL; 
   }
+
+  
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
@@ -764,7 +767,7 @@ priority_yield (void) {
    on a lock it loops over the lock's holder up do MAX_DONATION_DEPTH times */
 void thread_donate_priority (struct thread *t, int new_priority) {
   ASSERT (!thread_mlfqs);
-  for (int i=0; i<MAX_DONATION_DEPTH; i++) 
+  for (int i = 0; i < MAX_DONATION_DEPTH; i++) 
   {
     if (t != NULL && new_priority > t->priority) 
     {
@@ -774,7 +777,7 @@ void thread_donate_priority (struct thread *t, int new_priority) {
         t = t->recipient->holder;
       }
       else
-        break;
+        break;  
     } 
     else
      break;
@@ -787,18 +790,21 @@ void thread_donate_priority (struct thread *t, int new_priority) {
 void thread_calc_donate_priority (void) {
   struct thread *t = thread_current ();
   ASSERT (is_thread (t));
+  t->priority = t->base_priority;
   int max_priority = t->base_priority;
-  struct list_elem *e;
-  for (e = list_begin (&t->donors); e != list_end (&t->donors); e = list_next (e))
-  {
-    struct list waiters = list_entry (e, struct lock, elem)->semaphore.waiters;
-    if (!list_empty (&waiters)) 
-    {
-      struct list_elem *max_elem = list_min (&waiters, thread_priority_higher, NULL); 
-      int max_waiter_priority = list_entry (max_elem, struct thread, elem)->priority;
-      max_priority = max_waiter_priority > max_priority ? max_waiter_priority : max_priority;
+
+  if (!list_empty (&t->donors)) {
+    struct list_elem *e;
+    for (e = list_begin (&t->donors); e != list_end (&t->donors); e = list_next (e)) {
+
+      struct list *waiters = &list_entry (e, struct lock, elem)->semaphore.waiters;
+    
+      if (!list_empty (waiters)) {
+        int max_waiter_priority = list_entry (list_min (waiters, thread_priority_higher, NULL), struct thread, elem)->priority;
+        if (max_waiter_priority > max_priority)
+          max_priority = max_waiter_priority;
+      }
     }
   }
   t->priority = max_priority;
-  return;
 }
