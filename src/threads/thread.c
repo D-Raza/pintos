@@ -289,8 +289,8 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-      list_push_back(&ready_list, &t->elem);
   t->status = THREAD_READY;
+  list_insert_ordered (&ready_list, &t->elem, thread_priority_higher, NULL);
   intr_set_level (old_level);
 }
 
@@ -360,7 +360,7 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_push_back(&ready_list, &cur->elem);
+    list_insert_ordered (&ready_list, &cur->elem, thread_priority_higher, NULL);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -599,12 +599,7 @@ next_thread_to_run (void)
   if (list_empty (&ready_list))
     return idle_thread;
   else
-    {
-      struct list_elem *max_elem = 
-	      list_min (&ready_list, thread_priority_higher, NULL);
-      list_remove (max_elem);
-      return list_entry (max_elem, struct thread, elem);
-    }
+    return list_entry (list_pop_front (&ready_list), struct thread, elem);
 }
 
 
@@ -756,7 +751,7 @@ thread_priority_higher (const struct list_elem *l1_raw,
 {
   struct thread *t1 = list_entry (l1_raw, struct thread, elem);
   struct thread *t2 = list_entry (l2_raw, struct thread, elem);
-  return t1->priority < t2->priority;
+  return t1->priority > t2->priority;
 }
 
 /* Yields the CPU if the current thread is not the highest priority
@@ -767,8 +762,7 @@ priority_yield (void)
   enum intr_level old_level = intr_disable ();
   if (!list_empty (&ready_list))
     {
-      struct list_elem *max_elem = list_min (&ready_list, 
-	thread_priority_higher, NULL);
+      struct list_elem *max_elem = list_front (&ready_list);
       struct thread *t = list_entry (max_elem, struct thread, elem);
       if (thread_current ()->priority <= t->priority)
         {
@@ -799,6 +793,11 @@ void thread_donate_priority (struct thread *t, int new_priority) {
       else
         break;
     }
+  if (t->status == THREAD_READY && !list_empty (&ready_list))
+    {
+      list_remove (&t->elem);
+      list_insert_ordered (&ready_list, &t->elem, thread_priority_higher, NULL);
+    }
 }
 
 /* Re-calculates the current thread's priority, by finding the 
@@ -806,7 +805,7 @@ void thread_donate_priority (struct thread *t, int new_priority) {
    base priority */
 
 void thread_calc_donate_priority (void) {
-  struct thread *t = thread_current ();
+  struct thread *t = thread_current (); 
   t->priority = t->base_priority;
   int max_priority = t->base_priority;
 
@@ -816,7 +815,7 @@ void thread_calc_donate_priority (void) {
       for (e = list_begin (&t->donors); 
 	e != list_end (&t->donors); 
 	e = list_next (e)) 
-        {
+        { 
           struct list *waiters = &list_entry (e, struct lock, elem)
 	    ->semaphore.waiters;
     
