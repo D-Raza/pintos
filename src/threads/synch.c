@@ -33,7 +33,8 @@
 #include "threads/thread.h"
 
 static bool semaphore_less (const struct list_elem *a,
-                const struct list_elem *b, void *aux UNUSED);
+                            const struct list_elem *b, 
+			    void *aux UNUSED);
 
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
@@ -117,12 +118,12 @@ sema_up (struct semaphore *sema)
 
   old_level = intr_disable ();
   if (!list_empty (&sema->waiters))
-  {
-    struct list_elem *max_thread = 
-	    list_min (&sema->waiters, &thread_priority_higher, NULL);
-    list_remove (max_thread); 
-    thread_unblock (list_entry (max_thread, struct thread, elem));
-  }
+    {
+      struct list_elem *max_thread = 
+        list_min (&sema->waiters, &thread_priority_higher, NULL);
+      list_remove (max_thread); 
+      thread_unblock (list_entry (max_thread, struct thread, elem));
+    }
   sema->value++;
   intr_set_level (old_level);
   if (intr_context ())
@@ -208,27 +209,27 @@ lock_acquire (struct lock *lock)
   ASSERT (!lock_held_by_current_thread (lock));
 
   if (thread_mlfqs)
-  {
-    sema_down (&lock->semaphore);
-    lock->holder = thread_current ();
-  }
-  else 
-  {
-    enum intr_level old_level = intr_disable ();
-
-    struct thread *t = thread_current ();
-    t->recipient = lock;
-    if (lock->holder != NULL && lock->holder != t)
     {
-      thread_donate_priority (lock->holder, t->priority);
+      sema_down (&lock->semaphore);
+      lock->holder = thread_current ();
     }
-    sema_down (&lock->semaphore);
-    lock->holder = thread_current ();
-    t->recipient = NULL;
-    list_push_back (&t->donors, &lock->elem);
+  else 
+    {
+      enum intr_level old_level = intr_disable ();
 
-    intr_set_level (old_level);
-  }
+      struct thread *t = thread_current ();
+      t->recipient = lock;
+      if (lock->holder != NULL && lock->holder != t)
+        {
+          thread_donate_priority (lock->holder, t->priority);
+        }
+      sema_down (&lock->semaphore);
+      lock->holder = thread_current ();
+      t->recipient = NULL;
+      list_push_back (&t->donors, &lock->elem);
+
+      intr_set_level (old_level);
+    }
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -265,10 +266,10 @@ lock_release (struct lock *lock)
   enum intr_level old_level = intr_disable ();
   
   if (!thread_mlfqs) 
-  {
-    list_remove (&lock->elem);
-    thread_calc_donate_priority ();
-  }
+    {
+      list_remove (&lock->elem);
+      thread_calc_donate_priority ();
+    }
   lock->holder = NULL;
   intr_set_level (old_level);
   sema_up (&lock->semaphore);
@@ -356,13 +357,13 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   ASSERT (lock_held_by_current_thread (lock));
 
   if (!list_empty (&cond->waiters)) 
-  {
-    struct list_elem *max_elem = 
-	    list_max (&cond->waiters, semaphore_less, NULL);
-    list_remove (max_elem);
-    sema_up (&list_entry (max_elem, struct semaphore_elem, elem)
-	    ->semaphore);
-  }
+    {
+      struct list_elem *max_elem = 
+        list_max (&cond->waiters, semaphore_less, NULL);
+      list_remove (max_elem);
+      sema_up (&list_entry (max_elem, struct semaphore_elem, elem)
+        ->semaphore);
+    }
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by
@@ -388,18 +389,18 @@ semaphore_less (const struct list_elem *a,
 		const struct list_elem *b, void *aux UNUSED)
 {
   struct list *waiters_a = &list_entry (
-	a, struct semaphore_elem, elem)->semaphore.waiters;
+    a, struct semaphore_elem, elem)->semaphore.waiters;
   struct list *waiters_b = &list_entry (
-        b, struct semaphore_elem, elem)->semaphore.waiters;
+    b, struct semaphore_elem, elem)->semaphore.waiters;
   int priority_a = PRI_MIN;
   int priority_b = PRI_MIN;
   if (!list_empty (waiters_a))
     priority_a = list_entry (
-	list_min (waiters_a, thread_priority_higher, NULL),
-        struct thread, elem)->priority;
+      list_min (waiters_a, thread_priority_higher, NULL),
+      struct thread, elem)->priority;
   if (!list_empty (waiters_b))
     priority_b = list_entry (
-	list_min (waiters_b, thread_priority_higher, NULL), 
-	struct thread, elem)->priority;
+      list_min (waiters_b, thread_priority_higher, NULL), 
+      struct thread, elem)->priority;
   return priority_a < priority_b;
 }
