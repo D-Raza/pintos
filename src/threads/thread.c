@@ -171,6 +171,7 @@ thread_tick (void)
       /* Priorities are to be updated every 4th tick. */
       if (timer_ticks () % TIME_SLICE == 0) 
         {
+          mlfqs_update_priority (t, NULL);
           priority_yield ();
         }
     }
