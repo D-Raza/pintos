@@ -79,7 +79,6 @@ static void recalc_load_avg (void);
 static void recalc_recent_cpu (struct thread *t, void *aux UNUSED);
 static int recalc_priority (struct thread *t);
 static void mlfqs_update_priority (struct thread *t, void *aux UNUSED);
-static void priority_yield (void);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -761,7 +760,7 @@ thread_priority_higher (const struct list_elem *l1_raw,
 
 /* Yields the CPU if the current thread is not the highest priority
    thread */
-static void 
+void 
 priority_yield (void) 
 {
   enum intr_level old_level = intr_disable ();
