@@ -764,12 +764,6 @@ thread_priority_higher (const struct list_elem *l1_raw,
 static void 
 priority_yield (void) 
 {
-  if (thread_mlfqs)
-    {
-      enum intr_level old_level = intr_disable ();
-      thread_foreach (mlfqs_update_priority, NULL);
-      intr_set_level (old_level);
-    }
   enum intr_level old_level = intr_disable ();
   if (!list_empty (&ready_list))
     {
