@@ -102,8 +102,8 @@ struct thread
     int nice;                           /* Nice value. */
     fixed_point_t recent_cpu;           /* Measure of recent CPU usage. */
     struct list_elem allelem;           /* List element for all threads list. */
-    struct lock *recipient;            
-    struct list donors;
+    struct lock *recipient;             /* Donation recipient, lock thread blocked on */ 
+    struct list donors;                 /* Locks thread holds */
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
@@ -150,6 +150,7 @@ int thread_get_priority (void);
 void thread_set_priority (int);
 void thread_donate_priority (struct thread *t, int);
 void thread_calc_donate_priority (void);
+void priority_yield (void);
 
 int thread_get_nice (void);
 void thread_set_nice (int);
