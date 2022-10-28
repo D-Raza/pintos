@@ -51,8 +51,11 @@ static long long idle_ticks;    /* # of timer ticks spent idle. */
 static long long kernel_ticks;  /* # of timer ticks in kernel threads. */
 static long long user_ticks;    /* # of timer ticks in user programs. */
 
-/* Load average of the CPU */
+/* Load average of the CPU. */
 static fixed_point_t load_avg;
+
+/* Number of ready threads. */
+static int num_of_ready_threads;
 
 /* Scheduling. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
@@ -103,6 +106,8 @@ thread_init (void)
   list_init (&ready_list);
 
   list_init (&all_list);
+
+  num_of_ready_threads = 0;
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -290,6 +295,7 @@ thread_unblock (struct thread *t)
   ASSERT (t->status == THREAD_BLOCKED);
   t->status = THREAD_READY;
   list_insert_ordered (&ready_list, &t->elem, thread_priority_higher, NULL);
+  num_of_ready_threads++;
   intr_set_level (old_level);
 }
 
@@ -359,7 +365,10 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_insert_ordered (&ready_list, &cur->elem, thread_priority_higher, NULL);
+    {
+      num_of_ready_threads++;
+      list_insert_ordered (&ready_list, &cur->elem, thread_priority_higher, NULL);
+    }
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -598,7 +607,10 @@ next_thread_to_run (void)
   if (list_empty (&ready_list))
     return idle_thread;
   else
-    return list_entry (list_pop_front (&ready_list), struct thread, elem);
+    {
+      num_of_ready_threads--;
+      return list_entry (list_pop_front (&ready_list), struct thread, elem);
+    }
 }
 
 
@@ -708,9 +720,9 @@ recalc_load_avg (void)
 {
   fixed_point_t coeff1 = divide_fp_int (int_to_fp(59), 60);
   fixed_point_t coeff2 = divide_fp_int(int_to_fp(1), 60);
-  int ready_threads = threads_ready ();
+  int ready_threads = num_of_ready_threads;
   if (thread_current () != idle_thread)
-    ready_threads++; 
+    ready_threads++;
   load_avg = add_fp (multiply_fp (coeff1, load_avg), 
     multiply_fp_int (coeff2, ready_threads));
 }
@@ -801,7 +813,8 @@ void thread_donate_priority (struct thread *t, int new_priority)
   if (t->status == THREAD_READY && !list_empty (&ready_list))
     {
       list_remove (&t->elem);
-      list_insert_ordered (&ready_list, &t->elem, thread_priority_higher, NULL);
+      list_insert_ordered (&ready_list, &t->elem, 
+                          thread_priority_higher, NULL);
     }
 }
 
