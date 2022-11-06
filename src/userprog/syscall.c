@@ -3,6 +3,7 @@
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/vaddr.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -43,3 +44,34 @@ put_user (uint8_t *udst, uint8_t byte)
     : "=&a" (error_code), "=m" (*udst) : "q" (byte));
   return error_code != -1;
 }
+
+/* Attempts to read user data from uaddr. 
+   If access invalid returns -1. */
+static int
+mem_try_read (const uint8_t *uaddr)
+{
+  if (is_user_vaddr (uaddr))
+    {
+      return get_user (uaddr);
+    }
+  else
+    {
+      return -1;
+    }
+}
+
+/* Attempts to write data byte to user address udst.
+   Return true if successful and false otherwise. */
+static bool
+mem_try_write (uint8_t *udst, uint8_t byte)
+{
+  if (is_user_vaddr (udst))
+    {
+      return put_user (udst, byte);
+    }
+  else
+  {
+    return false;
+  }
+}
+
