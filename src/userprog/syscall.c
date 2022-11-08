@@ -78,18 +78,18 @@ mem_try_write (uint8_t *udst, uint8_t byte)
 /* Terminates Pintos by calling 
    shutdown_power_off() 
 */
-void halt (void);
+void syscall_halt (void);
 
 /* Terminates the current user program and sends exit status to kernel.
    A status of 0 is a success.
 */
-void exit (int status);
+void syscall_exit (int status);
 
 /* Runs executable whose name is given in the command line, 
    passing given args and returns the new process's pid
 */
 pid_t 
-exec (const char *cmd_line)
+syscall_exec (const char *cmd_line)
 {
   /* TO DO */
   return NULL;
@@ -105,7 +105,7 @@ exec (const char *cmd_line)
    If pid is not a direct child of the calling process, wait fails and returns –1.
 
    If the process calling wait has already called it, wait fails and returns -1*/
-int wait (pid t pid)
+int syscall_wait (pid t pid)
 {
   /* TO DO */
   return 0;
@@ -113,7 +113,7 @@ int wait (pid t pid)
 
 /* Creates a new file called file with size initial_size bytes.
    Returns true if successful and false otherwise. */
-bool create (const char *file, unsigned initial_size)
+bool syscall_create (const char *file, unsigned initial_size)
 {
   /* TO DO */
   return false;
@@ -123,7 +123,7 @@ bool create (const char *file, unsigned initial_size)
 /* Deletes file 
    Returns true if successful and false otherwise.
    If the file is currently open, it remains open after removal */
-bool remove (const char *file)
+bool syscall_remove (const char *file)
 {
   /* TO DO */
   return false;
@@ -132,21 +132,21 @@ bool remove (const char *file)
 /* Tries to open the file.
    If successful, the function returns -1.
    Otherwise, it returns the file descriptor. */
-int open (const char *file)
+int syscall_open (const char *file)
 {
   /* TO DO */
   return 0;
 }
 
 /* Returns the size, in bytes, of the file open as fd.*/
-int filesize (int fd)
+int syscall_filesize (int fd)
 {
   /* TO DO */
   return 0;
 }
 
 /* Reads size bytes from the file open as fd into buffer */
-int read (int fd, void *buffer, unsigned size)
+int syscall_read (int fd, void *buffer, unsigned size)
 {
   /* TO DO */
   return 0;
@@ -154,7 +154,7 @@ int read (int fd, void *buffer, unsigned size)
 
 /* Writes size bytes from buffer to the open file fd. Returns the number of bytes actually
    written, which may be less than size if some bytes could not be written */
-int write (int fd, const void *buffer, unsigned size)
+int syscall_write (int fd, const void *buffer, unsigned size)
 {
   /* TO DO */
   return 0;
@@ -162,16 +162,16 @@ int write (int fd, const void *buffer, unsigned size)
 
 /* Changes the next byte to be read or written in open file fd to position, expressed in bytes
 from the beginning of the file. */
-void seek (int fd, unsigned position);
+void syscall_seek (int fd, unsigned position);
 
 /* Returns the position of the next byte to be read or written in open file fd */
-unsigned tell (int fd)
+unsigned syscall_tell (int fd)
 {
   /* TO DO */
   return NULL;
 }
 
 /* Closes file descriptor fd.*/
-void close (int fd);
+void syscall_close (int fd);
 
 
