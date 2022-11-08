@@ -110,7 +110,7 @@ int get_page_ptr(struct intr_frame *f)
    shutdown_power_off() 
 */
 void sys_halt (void){
-  /* TO DO */
+  shutdown_power_off();
 }
 
 /* Terminates the current user program and sends exit status to kernel.
