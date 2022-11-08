@@ -13,8 +13,6 @@
 #include "filesys/file.h"
 #include "filesys/filesys.h"
 
-/*#define SINGLE_ARG 1
-#define TWO_ARGS 2*/
 #define MAX_ARGS 3
 
 static void syscall_handler (struct intr_frame *);
@@ -36,84 +34,17 @@ syscall_handler (struct intr_frame *f)
     FILESYS_ACQUIRE = true;
   }
 
+
   int esp = get_page_ptr((const void *) f->esp);
-
-  struct something {
-    * (int *) esp;
-
-  }
-
-  list_entry 
-
-
-  switch (* (int *) esp) /* size of int bytes from mem, starting from esp */
-  {
-    case SYS_HALT:
-      halt (); // DONE
-      break;
-    case SYS_EXIT:
-      sys_exit (f); // DONE
-      break;
-    case SYS_EXEC:
-      f->eax = exec (f); // DONE
-      break;
-    case SYS_WAIT:
-      f->eax = wait (f); // DONE;
-      break;
-    case SYS_CREATE:
-      f->eax = create (f); // DONE
-      break;
-    case SYS_REMOVE:
-      f->eax = remove ((const char *) args[0]);
-      break;
-    case SYS_OPEN:
-      get_stack_args(f, 1, &args[0]);
-
-      /* check that arg[0] is valid */
-      /* validate_str((const void*) arg[0])*/
-      args[0] = get_page_ptr((const void *)args[0]);
-      /* int open (const char *file) */
-      f->eax = open ((const char *) args[0]);
-      break;
-    case SYS_FILESIZE:
-      get_stack_args(f, 1, &args[0]);
-      /* int filesize (int fd) */
-      f->eax = filesize (args[0]);
-      break;
-    case SYS_READ:
-      get_stack_args(f, 3, &args[0]);
-      /* check that buffer is valid */
-      /* validate_buffer((const void *) arg[1], (unsigned) arg[2])*/
-      args[1] = get_page_ptr((const void *)args[0]);
-      /* int read (int fd, void *buffer, unsigned size) */
-      f->eax = read(args[0], (void *) args[1], (unsigned) args[2]);
-      break;
-    case SYS_WRITE:
-      get_stack_args(f, 3, &args[0]);
-      /* check that buffer is valid */
-      /* validate_buffer((const void *) arg[1], (unsigned) arg[2])*/
-      args[1] = get_page_ptr((const void *)arg[0]);
-      /* int write (int fd, const void *buffer, unsigned size) */
-      f->eax = syscall_write(args[0], (const void *) args[1], (unsigned) args[2]);
-      break;
-    case SYS_SEEK:
-      get_stack_args(f, 2, &args[0]);
-      /* void seek (int fd, unsigned position) */
-      seek(args[0], (unsigned) args[1]);
-      break;
-    case SYS_TELL:
-      get_stack_args(f, 1, &args[0]);
-      /* unsigned tell (int fd) */
-      f->eax = tell (args[0]);
-      break;
-    case SYS_CLOSE:
-      get_stack_args(f, 1, &args[0]);
-      /* void close (int fd) */
-      close (args[0])
-      break;
-    default:
-      break;
-
+  void (*sys_functions_arr[])(struct intr_frame *f) = {sys_halt,sys_exit, sys_exec, sys_wait, sys_create, sys_remove, sys_open,
+  sys_filesize, sys_read, sys_write, sys_seek, sys_tell, sys_close};
+  
+  /* need to find a way to see which functions return a value and set f->eax to it */
+  /* funcs returning a value are sys_exec, sys_wait, sys_create, sys_remove, 
+  sys_open, sys_filesize, sys_read, sys_write, sys_tell */
+  if ((* (int *) esp) < SYS_INUMBER)
+  { /* checks that esp is an enum */
+    (*sys_functions_arr[(* (int *) esp])(f) 
   }
   
   printf ("system call!\n");
@@ -202,7 +133,7 @@ int get_page_ptr(const void *vaddr){
 /* Terminates Pintos by calling 
    shutdown_power_off() 
 */
-void halt (void){
+void sys_halt (void){
   int args[MAX_ARGS];
   int esp = get_page_ptr((const void *) f->esp);
 }
@@ -210,7 +141,7 @@ void halt (void){
 /* Terminates the current user program and sends exit status to kernel.
    A status of 0 is a success.
 */
-void exit (struct intr_frame *f){
+void sys_exit (struct intr_frame *f){
   get_stack_args (f, 1, &args[0]);
   int args[MAX_ARGS];
   int esp = get_page_ptr((const void *) f->esp);
@@ -221,7 +152,7 @@ void exit (struct intr_frame *f){
    passing given args and returns the new process's pid
 */
 pid_t 
-exec (struct intr_frame *f)
+sys_exec (struct intr_frame *f)
 {
   int args[MAX_ARGS];
   int esp = get_page_ptr((const void *) f->esp);
@@ -248,7 +179,7 @@ exec (struct intr_frame *f)
    If pid is not a direct child of the calling process, wait fails and returns –1.
 
    If the process calling wait has already called it, wait fails and returns -1*/
-int wait (struct intr_frame *f)
+int sys_wait (struct intr_frame *f)
 {
   int args[MAX_ARGS];
   int esp = get_page_ptr((const void *) f->esp);
@@ -260,7 +191,7 @@ int wait (struct intr_frame *f)
 
 /* Creates a new file called file with size initial_size bytes.
    Returns true if successful and false otherwise. */
-bool create (struct intr_frame *f)
+bool sys_create (struct intr_frame *f)
 {
   int args[MAX_ARGS];
   int esp = get_page_ptr((const void *) f->esp);
@@ -281,7 +212,7 @@ bool create (struct intr_frame *f)
 /* Deletes file 
    Returns true if successful and false otherwise.
    If the file is currently open, it remains open after removal */
-bool remove (struct intr_frame *f, const char *file)
+bool sys_remove (struct intr_frame *f)
 {
   int args[MAX_ARGS];
   int esp = get_page_ptr((const void *) f->esp);
@@ -291,53 +222,108 @@ bool remove (struct intr_frame *f, const char *file)
   /* validate_str((const void*) arg[0])*/
   args[0] = get_page_ptr((const void *)args[0]);
   /* bool remove (const char *file) */
+  const char *file = (const char *) args[0];
   return false;
 }
 
 /* Tries to open the file.
    If successful, the function returns -1.
    Otherwise, it returns the file descriptor. */
-int open (struct intr_frame *f, const char *file)
+int sys_open (struct intr_frame *f, const char *file)
 {
   int args[MAX_ARGS];
   int esp = get_page_ptr((const void *) f->esp);
+
+  get_stack_args(f, 1, &args[0]);
+
+  /* check that arg[0] is valid */
+  /* validate_str((const void*) arg[0])*/
+  args[0] = get_page_ptr((const void *)args[0]);
+  /* int open (const char *file) */
+  const char *file = (const char *) args[0];
+
   return 0;
 }
 
 /* Returns the size, in bytes, of the file open as fd.*/
-int filesize (struct intr_frame *f, int fd)
+int sys_filesize (struct intr_frame *f, int fd)
 {
-  /* TO DO */
+  int args[MAX_ARGS];
+  int esp = get_page_ptr((const void *) f->esp);
+
+  get_stack_args(f, 1, &args[0]);
+  /* int filesize (int fd) */
+  int fd = args[0];
   return 0;
 }
 
 /* Reads size bytes from the file open as fd into buffer */
-int read (struct intr_frame *f, int fd, void *buffer, unsigned size)
+int sys_read (struct intr_frame *f)
 {
-  /* TO DO */
+  int args[MAX_ARGS];
+  int esp = get_page_ptr((const void *) f->esp);
+
+  get_stack_args(f, 3, &args[0]);
+  /* check that buffer is valid */
+  /* validate_buffer((const void *) arg[1], (unsigned) arg[2])*/
+  args[1] = get_page_ptr((const void *)args[0]);
+  /* int read (int fd, void *buffer, unsigned size) */
+  int fd = args[0];
+  void *buffer = (void *) args[1];
+  unsigned size = (unsigned) args[2];
+  // return value is set as f->eax;
   return 0;
 }
 
 /* Writes size bytes from buffer to the open file fd. Returns the number of bytes actually
    written, which may be less than size if some bytes could not be written */
-int write (struct intr_frame *f, int fd, const void *buffer, unsigned size)
+int sys_write (struct intr_frame *f, int fd, , unsigned size)
 {
-  /* TO DO */
+  int args[MAX_ARGS];
+  int esp = get_page_ptr((const void *) f->esp);
+
+  get_stack_args(f, 3, &args[0]);
+  /* check that buffer is valid */
+  /* validate_buffer((const void *) arg[1], (unsigned) arg[2])*/
+  args[1] = get_page_ptr((const void *)arg[0]);
+  /* int write (int fd, const void *buffer, unsigned size) */
+  int fd = args[0];
+  const void *buffer = (const void *) args[1];
+  unsigned size = (unsigned) args[2];
   return 0;
 }
 
 /* Changes the next byte to be read or written in open file fd to position, expressed in bytes
 from the beginning of the file. */
-void seek (struct intr_frame *f, int fd, unsigned position);
+void sys_seek (struct intr_frame *f) {
+  int args[MAX_ARGS];
+  int esp = get_page_ptr((const void *) f->esp);
+
+  get_stack_args(f, 2, &args[0]);
+  /* void seek (int fd, unsigned position) */
+  int fd = args[0];
+  unsigned position = (unsigned) args[1];
+}
 
 /* Returns the position of the next byte to be read or written in open file fd */
-unsigned tell (struct intr_frame *f, int fd)
+unsigned sys_tell (struct intr_frame *f, int fd)
 {
-  /* TO DO */
-  return NULL;
+  int args[MAX_ARGS];
+  int esp = get_page_ptr((const void *) f->esp);
+  get_stack_args(f, 1, &args[0]);
+  /* unsigned tell (int fd) */
+  int fd = args[0];
+  return NULL; /* f->eax */
 }
 
 /* Closes file descriptor fd.*/
-void close (struct intr_frame *f, int fd);
+void sys_close (struct intr_frame *f, int fd){
+  int args[MAX_ARGS];
+  int esp = get_page_ptr((const void *) f->esp);
+
+  get_stack_args(f, 1, &args[0]);
+  /* void close (int fd) */
+  int fd = args[0];
+}
 
 
