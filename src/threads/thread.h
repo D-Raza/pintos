@@ -112,7 +112,7 @@ struct thread
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
     struct list child_processes;        /* List of child processes */
-    struct process *process;            /* Process structure */
+    struct wait_handler *wait_handler;  /* Handles the wait/exit status of the child  */
 #endif
 
     /* Owned by thread.c. */

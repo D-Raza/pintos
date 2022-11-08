@@ -13,10 +13,10 @@ void process_activate (void);
 #define MAX_ARG_LIMIT 99
 
 /* Process struct */
-struct process
+struct wait_handler
 {
   tid_t tid;                    /* tid of the process */
-  struct semaphore wait_sema;   /* Semaphore for waiting for process to die */
+  struct semaphore wait_sema;   /* Semaphore for waiting for process to die. 1 = child alive, 0 = child dead.  */
   int exit_status;              /* Exit status */
   bool destroy;                 /* Whether to free */
   struct list_elem elem;        /* List element */
