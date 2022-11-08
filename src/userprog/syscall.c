@@ -4,6 +4,14 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/synch.h"
+#include "userprog/pagedir.h"
+#include "userprog/process.h"
+#include "user/syscall.h"
+#include "devices/input.h"
+#include "devices/shutdown.h"
+#include "filesys/file.h"
+#include "filesys/filesys.h"
 
 #define MAX_ARGS 3
 
@@ -18,7 +26,7 @@ syscall_init (void)
 }
 
 static void
-syscall_handler (struct intr_frame *f UNUSED) 
+syscall_handler (struct intr_frame *f) 
 {
   if (!FILESYS_ACQUIRE)
   {
@@ -27,6 +35,99 @@ syscall_handler (struct intr_frame *f UNUSED)
   }
 
   int args[MAX_ARGS];
+  int esp = get_page_ptr((const void *) f->esp);
+
+  switch (* (int *) esp) /* size of int bytes from mem, starting from esp */
+  {
+    case SYS_HALT:
+      halt();
+      break;
+    case SYS_EXIT:
+      get_stack_args (f, 1, &args[0]);
+      exit (args[0]);
+      break;
+    case SYS_EXEC:
+      get_stack_args(f, 1, &args[0]);
+
+      /* check that arg[0] is valid */
+      /* validate_str((const void*) arg[0])*/
+
+      /* get page pointer */
+      args[0] = get_page_ptr ((const void *)args[0]);
+      /* pid_t exec (const char *cmd_line) */
+      f->eax = exec ((const char*)args[0]);
+      break;
+    case SYS_WAIT:
+      get_stack_args(f, 1, &args[0]);
+      /* int wait (pid t pid) */
+      f->eax = wait(args[0]);
+      break;
+    case SYS_CREATE:
+      get_stack_args(f, 2, &args[0]);
+
+      /* check that arg[0] is valid */
+      /* validate_str((const void*) arg[0])*/
+      args[0] = get_page_ptr((const void *)args[0]);
+      /* bool create (const char *file, unsigned initial_size) */
+      f->eax = create ((const char *) args[0], (unsigned) args[1]);
+      break;
+    case SYS_REMOVE:
+      get_stack_args(f, 1, &args[0]);
+      /* check that arg[0] is valid */
+      /* validate_str((const void*) arg[0])*/
+      args[0] = get_page_ptr((const void *)args[0]);
+      /* bool remove (const char *file) */
+      f->eax = remove ((const char *) args[0]);
+      break;
+    case SYS_OPEN:
+      get_stack_args(f, 1, &args[0]);
+
+      /* check that arg[0] is valid */
+      /* validate_str((const void*) arg[0])*/
+      args[0] = get_page_ptr((const void *)args[0]);
+      /* int open (const char *file) */
+      f->eax = open ((const char *) args[0]);
+      break;
+    case SYS_FILESIZE:
+      get_stack_args(f, 1, &args[0]);
+      /* int filesize (int fd) */
+      f->eax = filesize (args[0]);
+      break;
+    case SYS_READ:
+      get_stack_args(f, 3, &args[0]);
+      /* check that buffer is valid */
+      /* validate_buffer((const void *) arg[1], (unsigned) arg[2])*/
+      args[1] = get_page_ptr((const void *)args[0]);
+      /* int read (int fd, void *buffer, unsigned size) */
+      f->eax = read(args[0], (void *) args[1], (unsigned) args[2]);
+      break;
+    case SYS_WRITE:
+      get_stack_args(f, 3, &args[0]);
+      /* check that buffer is valid */
+      /* validate_buffer((const void *) arg[1], (unsigned) arg[2])*/
+      args[1] = get_page_ptr((const void *)arg[0]);
+      /* int write (int fd, const void *buffer, unsigned size) */
+      f->eax = syscall_write(args[0], (const void *) args[1], (unsigned) args[2]);
+      break;
+    case SYS_SEEK:
+      get_stack_args(f, 2, &args[0]);
+      /* void seek (int fd, unsigned position) */
+      seek(args[0], (unsigned) args[1]);
+      break;
+    case SYS_TELL:
+      get_stack_args(f, 1, &args[0]);
+      /* unsigned tell (int fd) */
+      f->eax = tell (args[0]);
+      break;
+    case SYS_CLOSE:
+      get_stack_args(f, 1, &args[0]);
+      /* void close (int fd) */
+      close (args[0])
+      break;
+    default:
+      break;
+
+  }
   
   printf ("system call!\n");
   thread_exit ();
@@ -101,22 +202,31 @@ get_stack_args (struct intr_frame *f, int *num_of_args, int *args)
 }	
 
 
+/* gets page pointer using virtual address */
+int get_page_ptr(const void *vaddr){
+  void *ptr = pagedir_get_page(thread_current()->pagedir, vaddr);
+  if (!ptr)
+  {
+    syscall_exit(ERROR);
+  }
+  return (int) ptr;
+
 
 /* Terminates Pintos by calling 
    shutdown_power_off() 
 */
-void syscall_halt (void);
+void halt (void);
 
 /* Terminates the current user program and sends exit status to kernel.
    A status of 0 is a success.
 */
-void syscall_exit (int status);
+void exit (int status);
 
 /* Runs executable whose name is given in the command line, 
    passing given args and returns the new process's pid
 */
 pid_t 
-syscall_exec (const char *cmd_line)
+exec (const char *cmd_line)
 {
   /* TO DO */
   return NULL;
@@ -132,7 +242,7 @@ syscall_exec (const char *cmd_line)
    If pid is not a direct child of the calling process, wait fails and returns –1.
 
    If the process calling wait has already called it, wait fails and returns -1*/
-int syscall_wait (pid t pid)
+int wait (pid t pid)
 {
   /* TO DO */
   return 0;
@@ -140,7 +250,7 @@ int syscall_wait (pid t pid)
 
 /* Creates a new file called file with size initial_size bytes.
    Returns true if successful and false otherwise. */
-bool syscall_create (const char *file, unsigned initial_size)
+bool create (const char *file, unsigned initial_size)
 {
   /* TO DO */
   return false;
@@ -150,7 +260,7 @@ bool syscall_create (const char *file, unsigned initial_size)
 /* Deletes file 
    Returns true if successful and false otherwise.
    If the file is currently open, it remains open after removal */
-bool syscall_remove (const char *file)
+bool remove (const char *file)
 {
   /* TO DO */
   return false;
@@ -159,21 +269,21 @@ bool syscall_remove (const char *file)
 /* Tries to open the file.
    If successful, the function returns -1.
    Otherwise, it returns the file descriptor. */
-int syscall_open (const char *file)
+int open (const char *file)
 {
   /* TO DO */
   return 0;
 }
 
 /* Returns the size, in bytes, of the file open as fd.*/
-int syscall_filesize (int fd)
+int filesize (int fd)
 {
   /* TO DO */
   return 0;
 }
 
 /* Reads size bytes from the file open as fd into buffer */
-int syscall_read (int fd, void *buffer, unsigned size)
+int read (int fd, void *buffer, unsigned size)
 {
   /* TO DO */
   return 0;
@@ -181,7 +291,7 @@ int syscall_read (int fd, void *buffer, unsigned size)
 
 /* Writes size bytes from buffer to the open file fd. Returns the number of bytes actually
    written, which may be less than size if some bytes could not be written */
-int syscall_write (int fd, const void *buffer, unsigned size)
+int write (int fd, const void *buffer, unsigned size)
 {
   /* TO DO */
   return 0;
@@ -189,16 +299,16 @@ int syscall_write (int fd, const void *buffer, unsigned size)
 
 /* Changes the next byte to be read or written in open file fd to position, expressed in bytes
 from the beginning of the file. */
-void syscall_seek (int fd, unsigned position);
+void seek (int fd, unsigned position);
 
 /* Returns the position of the next byte to be read or written in open file fd */
-unsigned syscall_tell (int fd)
+unsigned tell (int fd)
 {
   /* TO DO */
   return NULL;
 }
 
 /* Closes file descriptor fd.*/
-void syscall_close (int fd);
+void close (int fd);
 
 
