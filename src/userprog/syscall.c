@@ -13,6 +13,8 @@
 #include "filesys/file.h"
 #include "filesys/filesys.h"
 
+/*#define SINGLE_ARG 1
+#define TWO_ARGS 2*/
 #define MAX_ARGS 3
 
 static void syscall_handler (struct intr_frame *);
@@ -34,49 +36,34 @@ syscall_handler (struct intr_frame *f)
     FILESYS_ACQUIRE = true;
   }
 
-  int args[MAX_ARGS];
   int esp = get_page_ptr((const void *) f->esp);
+
+  struct something {
+    * (int *) esp;
+
+  }
+
+  list_entry 
+
 
   switch (* (int *) esp) /* size of int bytes from mem, starting from esp */
   {
     case SYS_HALT:
-      halt();
+      halt (); // DONE
       break;
     case SYS_EXIT:
-      get_stack_args (f, 1, &args[0]);
-      exit (args[0]);
+      sys_exit (f); // DONE
       break;
     case SYS_EXEC:
-      get_stack_args(f, 1, &args[0]);
-
-      /* check that arg[0] is valid */
-      /* validate_str((const void*) arg[0])*/
-
-      /* get page pointer */
-      args[0] = get_page_ptr ((const void *)args[0]);
-      /* pid_t exec (const char *cmd_line) */
-      f->eax = exec ((const char*)args[0]);
+      f->eax = exec (f); // DONE
       break;
     case SYS_WAIT:
-      get_stack_args(f, 1, &args[0]);
-      /* int wait (pid t pid) */
-      f->eax = wait(args[0]);
+      f->eax = wait (f); // DONE;
       break;
     case SYS_CREATE:
-      get_stack_args(f, 2, &args[0]);
-
-      /* check that arg[0] is valid */
-      /* validate_str((const void*) arg[0])*/
-      args[0] = get_page_ptr((const void *)args[0]);
-      /* bool create (const char *file, unsigned initial_size) */
-      f->eax = create ((const char *) args[0], (unsigned) args[1]);
+      f->eax = create (f); // DONE
       break;
     case SYS_REMOVE:
-      get_stack_args(f, 1, &args[0]);
-      /* check that arg[0] is valid */
-      /* validate_str((const void*) arg[0])*/
-      args[0] = get_page_ptr((const void *)args[0]);
-      /* bool remove (const char *file) */
       f->eax = remove ((const char *) args[0]);
       break;
     case SYS_OPEN:
@@ -215,20 +202,39 @@ int get_page_ptr(const void *vaddr){
 /* Terminates Pintos by calling 
    shutdown_power_off() 
 */
-void halt (void);
+void halt (void){
+  int args[MAX_ARGS];
+  int esp = get_page_ptr((const void *) f->esp);
+}
 
 /* Terminates the current user program and sends exit status to kernel.
    A status of 0 is a success.
 */
-void exit (int status);
+void exit (struct intr_frame *f){
+  get_stack_args (f, 1, &args[0]);
+  int args[MAX_ARGS];
+  int esp = get_page_ptr((const void *) f->esp);
+  int status = arg[0];
+}
 
 /* Runs executable whose name is given in the command line, 
    passing given args and returns the new process's pid
 */
 pid_t 
-exec (const char *cmd_line)
+exec (struct intr_frame *f)
 {
-  /* TO DO */
+  int args[MAX_ARGS];
+  int esp = get_page_ptr((const void *) f->esp);
+  get_stack_args(f, 1, &args[0]);
+
+      /* check that arg[0] is valid */
+      /* validate_str((const void*) arg[0])*/
+
+      /* get page pointer */
+      args[0] = get_page_ptr ((const void *)args[0]);
+      /* pid_t exec (const char *cmd_line) */
+      const char *cmd_line = (const char *) args[0];
+      /* formerly passed into the function as an argument */
   return NULL;
 }
 
@@ -242,17 +248,32 @@ exec (const char *cmd_line)
    If pid is not a direct child of the calling process, wait fails and returns –1.
 
    If the process calling wait has already called it, wait fails and returns -1*/
-int wait (pid t pid)
+int wait (struct intr_frame *f)
 {
-  /* TO DO */
+  int args[MAX_ARGS];
+  int esp = get_page_ptr((const void *) f->esp);
+  get_stack_args(f, 1, &args[0]);
+      /* int wait (pid t pid) */
+  pid_t pid = arg[0]; /* previously passed as arg */
   return 0;
 }
 
 /* Creates a new file called file with size initial_size bytes.
    Returns true if successful and false otherwise. */
-bool create (const char *file, unsigned initial_size)
+bool create (struct intr_frame *f)
 {
-  /* TO DO */
+  int args[MAX_ARGS];
+  int esp = get_page_ptr((const void *) f->esp);
+
+  get_stack_args(f, 2, &args[0]);
+
+  /* check that arg[0] is valid */
+  /* validate_str((const void*) arg[0])*/
+  args[0] = get_page_ptr((const void *)args[0]);
+  /* bool create (const char *file, unsigned initial_size) */
+  const char *file = (const char *) args[0];
+  unsigned initial_size = (unsigned) args[1]);
+
   return false;
 }
 
@@ -260,30 +281,38 @@ bool create (const char *file, unsigned initial_size)
 /* Deletes file 
    Returns true if successful and false otherwise.
    If the file is currently open, it remains open after removal */
-bool remove (const char *file)
+bool remove (struct intr_frame *f, const char *file)
 {
-  /* TO DO */
+  int args[MAX_ARGS];
+  int esp = get_page_ptr((const void *) f->esp);
+
+  get_stack_args(f, 1, &args[0]);
+  /* check that arg[0] is valid */
+  /* validate_str((const void*) arg[0])*/
+  args[0] = get_page_ptr((const void *)args[0]);
+  /* bool remove (const char *file) */
   return false;
 }
 
 /* Tries to open the file.
    If successful, the function returns -1.
    Otherwise, it returns the file descriptor. */
-int open (const char *file)
+int open (struct intr_frame *f, const char *file)
 {
-  /* TO DO */
+  int args[MAX_ARGS];
+  int esp = get_page_ptr((const void *) f->esp);
   return 0;
 }
 
 /* Returns the size, in bytes, of the file open as fd.*/
-int filesize (int fd)
+int filesize (struct intr_frame *f, int fd)
 {
   /* TO DO */
   return 0;
 }
 
 /* Reads size bytes from the file open as fd into buffer */
-int read (int fd, void *buffer, unsigned size)
+int read (struct intr_frame *f, int fd, void *buffer, unsigned size)
 {
   /* TO DO */
   return 0;
@@ -291,7 +320,7 @@ int read (int fd, void *buffer, unsigned size)
 
 /* Writes size bytes from buffer to the open file fd. Returns the number of bytes actually
    written, which may be less than size if some bytes could not be written */
-int write (int fd, const void *buffer, unsigned size)
+int write (struct intr_frame *f, int fd, const void *buffer, unsigned size)
 {
   /* TO DO */
   return 0;
@@ -299,16 +328,16 @@ int write (int fd, const void *buffer, unsigned size)
 
 /* Changes the next byte to be read or written in open file fd to position, expressed in bytes
 from the beginning of the file. */
-void seek (int fd, unsigned position);
+void seek (struct intr_frame *f, int fd, unsigned position);
 
 /* Returns the position of the next byte to be read or written in open file fd */
-unsigned tell (int fd)
+unsigned tell (struct intr_frame *f, int fd)
 {
   /* TO DO */
   return NULL;
 }
 
 /* Closes file descriptor fd.*/
-void close (int fd);
+void close (struct intr_frame *f, int fd);
 
 
