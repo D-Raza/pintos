@@ -8,6 +8,6 @@ int process_wait (tid_t);
 void process_exit (void);
 void process_activate (void);
 
-#define MAX_ARG_LIMIT 99
+#define MAX_ARG_LIMIT 140
 
 #endif /* userprog/process.h */
