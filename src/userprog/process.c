@@ -23,7 +23,7 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
 static void tokenize_args (char **file_name, char **argv);
 static int get_argc (char *file_name);
-static void push_to_stack (char **argv, int argc, struct intr_frame *if_);
+static void push_all_to_stack (char **argv, int argc, struct intr_frame *if_);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -89,6 +89,7 @@ start_process (void *file_name_)
       /* Push number of args: argc */
       /* Push a fake return address (0) */
       /* All handled by push_all_to_stack */
+      push_all_to_stack (tokens, argc, &if_);
     }
 
   /* If load failed, quit. */
@@ -554,7 +555,41 @@ get_argc (char *file_name)
 static void
 push_all_to_stack (char **argv, int argc, struct intr_frame *if_) 
   {
-   // TODO
-   
+    void **esp = if_->esp; 
+
+    /* Push the arguments, one by one, in reverse order */
+    int c = argc;
+    while (c >= 0) {
+      *esp = argv[c];
+      esp -= sizeof(argv[c]);
+      c--;
+    }
+
+    /* Push a null pointer sentinel (0) */
+    *esp = '\0';
+
+    /* Stores stack address of the pointer to the first element in argv */
+    /* Check this */
+    void *first_ptr;
+
+    /* Push pointers to the arguments, one by one, in reverse order */
+    c = argc;
+    while (c >= 0) {
+      *esp = &argv[c];
+      esp -= sizeof(&argv[c]);
+      if (c == 0) {
+        first_ptr = esp;
+      }
+      c--;
+    }
+
+    /* Push a pointer to the first pointer */
+    *esp = first_ptr;
+    esp -= sizeof(first_ptr);
+
+    /* Push fake return address */
+    int fake_adr = 0x0D0A2;
+    *esp = fake_adr;
+    esp -= sizeof(fake_adr);
   }
   
