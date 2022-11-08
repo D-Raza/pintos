@@ -86,8 +86,23 @@ start_process (void *file_name_)
  * This function will be implemented in task 2.
  * For now, it does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
+  struct list *child_processes = &thread_current ()->child_processes;
+  struct process *child_process;
+
+  for (struct list_elem *e = list_begin (child_processes); 
+        e != list_end (child_processes); 
+        e = list_next (e)) {
+      child_process = list_entry (e, struct process, elem);
+      if (child_process->tid == child_tid)
+        {
+          sema_down (&child_process->wait_sema);
+          list_remove(&child_process->elem);
+          free(child_process);
+          return child_process->exit_status;
+        }
+  }
   return -1;
 }
 
