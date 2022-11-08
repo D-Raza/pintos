@@ -138,7 +138,7 @@ process_exit (void)
   pd = cur->pagedir;
   if (pd != NULL) 
     {
-      printf("%s: exit(%d)\n", cur->name, cur->process->exit_status);
+      printf("%s: exit(%d)\n", cur->name, cur->wait_handler->exit_status);
 
       /* Correct ordering here is crucial.  We must set
          cur->pagedir to NULL before switching page directories,
