@@ -95,14 +95,14 @@ process_wait (tid_t child_tid)
   for (struct list_elem *e = list_begin (child_processes); 
         e != list_end (child_processes); 
         e = list_next (e)) {
-      child_process = list_entry (e, struct wait_struct, elem);
+      child_process = list_entry (e, struct wait_handler, elem);
       if (child_process->tid == child_tid)
         {
           sema_down (&child_process->wait_sema);
           list_remove(&child_process->elem);
-          if (test_set(child_process->destroy))
+          if (test_set(&child_process->destroy))
             {
-              free(child_process);
+              free(&child_process);
             }
           return child_process->exit_status;
         }
@@ -120,17 +120,17 @@ process_exit (void)
   /* Free all processes in the child_processes list */
   while (!list_empty (&cur->child_processes)) {
     struct list_elem *e = list_pop_front (&cur->child_processes);
-    struct wait_handler *child_process = list_entry (e, struct wait_struct, elem);
-    if (test_set(child_process->destroy))
+    struct wait_handler *child_process = list_entry (e, struct wait_handler, elem);
+    if (test_set(&child_process->destroy))
       {
-        free(child_process);
+        free(&child_process);
       }
   }
 
   sema_up (&cur->wait_handler->wait_sema);
-  if (test_set(cur->wait_handler->destroy))
+  if (test_set(&cur->wait_handler->destroy))
     {
-      free(cur->wait_handler);
+      free(&cur->wait_handler);
     }
 
   /* Destroy the current process's page directory and switch back
