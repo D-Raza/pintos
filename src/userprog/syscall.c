@@ -5,7 +5,11 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
+#define MAX_ARGS 3
+
 static void syscall_handler (struct intr_frame *);
+
+bool FILESYS_LOCK_ACQUIRE = false;
 
 void
 syscall_init (void) 
@@ -16,6 +20,14 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
+  if (!FILESYS_ACQUIRE)
+  {
+    lock_init(&file_sys_lock);
+    FILESYS_ACQUIRE = true;
+  }
+
+  int args[MAX_ARGS];
+  
   printf ("system call!\n");
   thread_exit ();
 }
@@ -74,6 +86,21 @@ mem_try_write (uint8_t *udst, uint8_t byte)
     return false;
   }
 }
+
+/* gets arguments from the stack and stores them in the array args */
+void
+get_stack_args (struct intr_frame *f, int *num_of_args, int *args)
+{
+  int i;
+  int *pointer;
+  for (i = 0; i < num_of_args; i++){
+    pointer = (int *) f->esp + i + 1;
+    // validate pointer
+    args[i] = pointer;
+  }
+}	
+
+
 
 /* Terminates Pintos by calling 
    shutdown_power_off() 
