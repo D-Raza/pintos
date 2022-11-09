@@ -249,7 +249,7 @@ void sys_read (struct intr_frame *f)
   /* int read (int fd, void *buffer, unsigned size) */
 
   /* Don't think I need the below
-  /*int fd = args[0];
+  int fd = args[0];
   void *buffer = (void *) args[1];
   unsigned size = (unsigned) args[2];*/
    /* change eax val (below) once sys_remove has been completed */
@@ -272,7 +272,26 @@ void sys_write (struct intr_frame *f)
   const void *buffer = (const void *) args[1];
   unsigned size = (unsigned) args[2];
   /* change eax val (below) once sys_remove has been completed */
-  f->eax = 0;
+  /* the below code has been commented out as there's no current mapping between file and fd */
+
+  /* struct file *file = thread_current()->file_name; */
+  int written_size = 0;
+  if (fd == 1){
+    while (size > 300){
+      putbuf (buffer, 300);
+      buffer += 300;
+      written_size += 300;
+    }
+    putbuf (buffer, size - written_size);
+    written_size = size;
+  }
+  /*
+  else {
+	  //file_write (struct file *file, const void *buffer, off_t size)
+	written_size = file_write (file, (const void *) args[1], (unsigned) args[2]);
+  } */
+
+  f->eax = written_size;
 }
 
 /* Changes the next byte to be read or written in open file fd to position, expressed in bytes
