@@ -21,7 +21,7 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
-static void tokenize_args (char **file_name, char **argv);
+static void tokenize_args (char *file_name, char **argv);
 static int get_argc (char *file_name);
 static void push_all_to_stack (char **argv, int argc, struct intr_frame *if_);
 
@@ -69,9 +69,8 @@ start_process (void *file_name_)
 
   /* Tokenize file_name into an array of strings - make some helper function of sort - 
      tokens contains the arguements as its elements*/
-  char *token, *save_ptr;
   char *tokens[argc];
-  tokenize_args (&file_name, tokens);
+  tokenize_args (file_name, tokens);
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -511,12 +510,16 @@ install_page (void *upage, void *kpage, bool writable)
 
 /* Tokenizes the args into the array argv */
 static void 
-tokenize_args(char** file_name, char** argv) 
+tokenize_args(char *file_name, char **argv) 
   {
+    /* Use strlcpy to prevent mutation of original *file_name */
+    char *file_name_copy;
+    strlcpy (file_name_copy, file_name, strlen(file_name) + 1);
+
     char *token, *save_ptr;
     int i = 0;
 
-    for (token = strtok_r(file_name, " ", &save_ptr); token != NULL; 
+    for (token = strtok_r(file_name_copy, " ", &save_ptr); token != NULL; 
          token = strtok_r(NULL, " ", &save_ptr)) {
           argv[i] = token;
           i++;
@@ -530,7 +533,7 @@ get_argc (char *file_name)
     /* Use strlcpy to prevent mutation of original *file_name */
     char *file_name_copy;
     strlcpy (file_name_copy, file_name, strlen(file_name) + 1);
-
+    
     char *token, *save_ptr;
 
     /* Initialise the number of arguments to 0 */
@@ -576,28 +579,26 @@ push_all_to_stack (char **argv, int argc, struct intr_frame *if_)
       esp--;
     }
 
-    /* Stores stack address of the pointer to the first element in argv */
-    /* Check this */
-    void *first_ptr;
+    /* Stores stack address of the pointer in argv */
+    /* CHECK THIS */
+    void *first_ptr = esp - (argc * WORD_SIZE);
 
     /* Push pointers to the arguments, one by one, in reverse order */
     count = argc;
     while (count >= 0) {
       *esp = &argv[count];
       esp -= sizeof(&argv[count]);
-      if (count == 0) {
-        first_ptr = esp;
-      }
+      
       count--;
     }
 
-    /* Push a pointer to the first pointer in argv */
+    /* Push the pointer to the first pointer in argv */
     *esp = first_ptr;
     esp -= sizeof(first_ptr);
 
     /* Push fake return address */
-    int fake_adr = 0x0000000;
+    int fake_adr_val = 0xD0C0FFEE;
+    int *fake_adr = &fake_adr_val;
     *esp = fake_adr;
     esp -= sizeof(fake_adr);
   }
-  
