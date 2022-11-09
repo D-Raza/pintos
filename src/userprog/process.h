@@ -9,5 +9,6 @@ void process_exit (void);
 void process_activate (void);
 
 #define MAX_ARG_LIMIT 140
+#define WORD_SIZE 4
 
 #endif /* userprog/process.h */
