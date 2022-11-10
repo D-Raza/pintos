@@ -21,6 +21,10 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
+static void tokenize_args (char *file_name, char **argv);
+static int get_argc (char *file_name);
+static void push_all_to_stack (char **argv, int argc, struct intr_frame *if_);
+
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -54,12 +58,38 @@ start_process (void *file_name_)
   struct intr_frame if_;
   bool success;
 
+  /* Check if number of args is a suitable amount (less than some macro) */
+  /* If not, then free, and kill */
+  int argc = get_argc (file_name);
+  if (argc >= MAX_ARG_LIMIT) 
+    {
+      palloc_free_page (file_name);
+      thread_exit ();
+    }
+
+  /* Tokenize file_name into an array of strings - make some helper function of sort - 
+     tokens contains the arguements as its elements*/
+  char *tokens[argc];
+  tokenize_args (file_name, tokens);
+
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
+
+  /* If file loaded successfully, set up stack */
+  if (success)  
+    {
+      /* Push args on stack in reverse order */
+      /* Push argv[argc] = NULL (a null pointer) */  
+      /* In reverse order, push pointers to args on stack */
+      /* Push number of args: argc */
+      /* Push a fake return address (0) */
+      /* All handled by push_all_to_stack */
+      push_all_to_stack (tokens, argc, &if_);
+    }
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -477,3 +507,98 @@ install_page (void *upage, void *kpage, bool writable)
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
+
+/* Tokenizes the args into the array argv */
+static void 
+tokenize_args(char *file_name, char **argv) 
+  {
+    /* Use strlcpy to prevent mutation of original *file_name */
+    char *file_name_copy;
+    strlcpy (file_name_copy, file_name, strlen(file_name) + 1);
+
+    char *token, *save_ptr;
+    int i = 0;
+
+    for (token = strtok_r(file_name_copy, " ", &save_ptr); token != NULL; 
+         token = strtok_r(NULL, " ", &save_ptr)) {
+          argv[i] = token;
+          i++;
+    }
+  } 
+
+/* Returns the number of arguments + filename */
+static int
+get_argc (char *file_name)
+  {
+    /* Use strlcpy to prevent mutation of original *file_name */
+    char *file_name_copy;
+    strlcpy (file_name_copy, file_name, strlen(file_name) + 1);
+    
+    char *token, *save_ptr;
+
+    /* Initialise the number of arguments to 0 */
+    int argc = 0;
+
+    /* Iterate through the tokens, splitting at spaces, and increment the number of arguments */
+    for (token = strtok_r (file_name_copy, " ", &save_ptr); token != NULL;
+         token = strtok_r (NULL, " ", &save_ptr)) {
+          argc++;
+         }
+    return argc; 
+  }
+
+/* Pushes all that is required onto the stack:
+   1. arguments in reverse order
+   2. A null pointer sentinel (0)
+   3. Push pointers to args, in reverse order
+   4. Push a pointer to the first pointer
+   5. Push the number of arguments
+   6. Push a fake return address (0) */
+
+static void
+push_all_to_stack (char **argv, int argc, struct intr_frame *if_) 
+  {
+    void **esp = if_->esp; 
+
+    /* Round the stack pointer down to a multiple of 4 before the first push onto the stack */
+    while (((int) esp) % WORD_SIZE != 0) {
+      esp--;
+    }
+
+    /* Push the arguments, one by one, in reverse order */
+    int count = argc;
+    while (count >= 0) {
+      *esp = argv[count];
+      esp -= sizeof(argv[count]);
+      count--;
+    }
+
+    /* Push a null pointer sentinel (0) until the address is word-aligned */
+    while (((int) esp) % WORD_SIZE != 0) {
+      *esp = '\0';
+      esp--;
+    }
+
+    /* Stores stack address of the pointer in argv */
+    /* CHECK THIS */
+    void *first_ptr = esp - (argc * WORD_SIZE);
+
+    /* Push pointers to the arguments, one by one, in reverse order */
+    count = argc;
+    while (count >= 0) {
+      *esp = &argv[count];
+      esp -= sizeof(&argv[count]);
+      
+      count--;
+    }
+
+    /* Push the pointer to the first pointer in argv */
+    *esp = first_ptr;
+    esp -= sizeof(first_ptr);
+
+    /* Push fake return address */
+    int fake_adr_val = 0xD0C0FFEE;
+    int *fake_adr = &fake_adr_val;
+    *esp = fake_adr;
+    esp -= sizeof(fake_adr);
+  }
