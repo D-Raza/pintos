@@ -574,8 +574,9 @@ init_thread (struct thread *t, const char *name, int priority)
       list_init (&t->donors);
       t->recipient = NULL; 
     }
-
-  
+#ifdef USERPROG
+  list_init (&t->child_processes);
+#endif
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
