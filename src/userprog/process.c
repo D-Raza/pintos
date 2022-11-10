@@ -48,7 +48,7 @@ process_execute (const char *file_name)
     // Check that the file name is less than 14 characters 
     // Add a check for if the tokenized arg length is less than 140
   }
-
+  list_push_back (&cur->child_processes, &wh->elem);
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
