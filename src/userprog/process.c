@@ -20,6 +20,7 @@
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+static bool test_set (bool *b);
 
 static void tokenize_args (char *file_name, char **argv);
 static int get_argc (char *file_name);
@@ -116,8 +117,26 @@ start_process (void *file_name_)
  * This function will be implemented in task 2.
  * For now, it does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
+  struct list *child_processes = &thread_current ()->child_processes;
+  struct wait_handler *child_process;
+
+  for (struct list_elem *e = list_begin (child_processes); 
+        e != list_end (child_processes); 
+        e = list_next (e)) {
+      child_process = list_entry (e, struct wait_handler, elem);
+      if (child_process->tid == child_tid)
+        {
+          sema_down (&child_process->wait_sema);
+          list_remove(&child_process->elem);
+          if (test_set(&child_process->destroy))
+            {
+              free(&child_process);
+            }
+          return child_process->exit_status;
+        }
+  }
   return -1;
 }
 
@@ -128,11 +147,29 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
+  /* Free all processes in the child_processes list */
+  while (!list_empty (&cur->child_processes)) {
+    struct list_elem *e = list_pop_front (&cur->child_processes);
+    struct wait_handler *child_process = list_entry (e, struct wait_handler, elem);
+    if (test_set(&child_process->destroy))
+      {
+        free(&child_process);
+      }
+  }
+
+  sema_up (&cur->wait_handler->wait_sema);
+  if (test_set(&cur->wait_handler->destroy))
+    {
+      free(&cur->wait_handler);
+    }
+
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
   if (pd != NULL) 
     {
+      printf("%s: exit(%d)\n", cur->name, cur->wait_handler->exit_status);
+
       /* Correct ordering here is crucial.  We must set
          cur->pagedir to NULL before switching page directories,
          so that a timer interrupt can't switch back to the
@@ -602,3 +639,8 @@ push_all_to_stack (char **argv, int argc, struct intr_frame *if_)
     *esp = fake_adr;
     esp -= sizeof(fake_adr);
   }
+static bool
+test_set (bool *b) 
+{
+  return __sync_lock_test_and_set (b, true);
+}
