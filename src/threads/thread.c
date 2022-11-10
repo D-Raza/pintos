@@ -851,6 +851,7 @@ void thread_calc_donate_priority (void)
   t->priority = max_priority;
 }
 
+/*
 int thread_is_alive (int pid)
 {
   struct list_elem *current;
@@ -866,3 +867,4 @@ int thread_is_alive (int pid)
   }
   return 0;
 }
+*/

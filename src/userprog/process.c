@@ -14,6 +14,7 @@
 #include "threads/flags.h"
 #include "threads/init.h"
 #include "threads/interrupt.h"
+#include "threads/malloc.h"
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
@@ -35,6 +36,18 @@ process_execute (const char *file_name)
 {
   char *fn_copy;
   tid_t tid;
+
+  struct thread *cur = thread_current ();
+  struct wait_handler *wh = malloc (sizeof (struct wait_handler));
+
+  if (wh) {
+    sema_init (&wh->wait_sema, 0);
+    wh->tid = TID_ERROR;
+    wh->destroy = 0;
+    wh->exit_status = -1;
+    // Check that the file name is less than 14 characters 
+    // Add a check for if the tokenized arg length is less than 140
+  }
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
@@ -150,7 +163,7 @@ process_exit (void)
   /* Free all processes in the child_processes list */
   while (!list_empty (&cur->child_processes)) {
     struct list_elem *e = list_pop_front (&cur->child_processes);
-    struct wait_handler *child_process = list_entry (e, struct wait_handler, elem);
+    struct wait_handler *child_process = list_entry (list_pop_front (&cur->child_processes), struct wait_handler, elem);
     if (test_set(&child_process->destroy))
       {
         free(&child_process);
@@ -550,7 +563,7 @@ static void
 tokenize_args(char *file_name, char **argv) 
   {
     /* Use strlcpy to prevent mutation of original *file_name */
-    char *file_name_copy;
+    char *file_name_copy = malloc(strlen(file_name) + 1);
     strlcpy (file_name_copy, file_name, strlen(file_name) + 1);
 
     char *token, *save_ptr;
@@ -568,7 +581,7 @@ static int
 get_argc (char *file_name)
   {
     /* Use strlcpy to prevent mutation of original *file_name */
-    char *file_name_copy;
+    char *file_name_copy = malloc(strlen(file_name) + 1);
     strlcpy (file_name_copy, file_name, strlen(file_name) + 1);
     
     char *token, *save_ptr;
