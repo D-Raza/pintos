@@ -112,7 +112,7 @@ get_page_ptr(struct intr_frame *f)
    shutdown_power_off() 
 */
 static void 
-sys_halt (void){
+sys_halt (struct intr_frame *f UNUSED){
   shutdown_power_off();
 }
 
