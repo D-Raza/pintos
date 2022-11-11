@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include <hash.h>
 #include "fixed-point.h"
 
 /* States in a thread's life cycle. */
@@ -107,6 +108,8 @@ struct thread
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+
+    struct hash *accessibleFiles; /* Hash table for all files the thread has access to */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
