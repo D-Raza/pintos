@@ -638,6 +638,10 @@ push_all_to_stack (char **argv, int argc, struct intr_frame *if_)
     /* CHECK THIS */
     void *first_ptr = *esp - (argc * WORD_SIZE);
 
+    /* Push sentinel entry */
+    * (int *) *esp = 0x00000000;
+    (*esp) -= sizeof (0x00000000);
+
     /* Push pointers to the arguments, one by one, in reverse order */
     count = argc - 1;
     while (count >= 0) {
