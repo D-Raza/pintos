@@ -620,9 +620,11 @@ push_all_to_stack (char **argv, int argc, struct intr_frame *if_)
     /* Push the arguments, one by one, in reverse order */
     int count = argc - 1;
     while (count >= 0) {
-      * (char *) *esp = argv[count];
+      int size = strlen(argv[count]) + 1;
+      *esp -= size;
+      strlcpy ((char *) *esp, argv[count], size);
       arg_ptrs[count] = *esp;
-      *esp -= sizeof(argv[count]);
+      *esp -= size;
       count--;
     }
 
