@@ -608,50 +608,52 @@ get_argc (char *file_name)
 static void
 push_all_to_stack (char **argv, int argc, struct intr_frame *if_) 
   {
-    void **esp = if_->esp; 
+    void **esp = &if_->esp; 
 
     /* Round the stack pointer down to a multiple of 4 before the first push onto the stack */
-    while (((int) esp) % WORD_SIZE != 0) {
-      esp--;
+    while (((int) *esp) % WORD_SIZE != 0) {
+      (*esp)--;
     }
 
     /* Push the arguments, one by one, in reverse order */
     int count = argc - 1;
     while (count >= 0) {
-      *esp = argv[count];
-      esp -= sizeof(argv[count]);
+      * (char *) *esp = argv[count];
+      *esp -= sizeof(argv[count]);
       count--;
     }
 
     /* Push a null pointer sentinel (0) until the address is word-aligned */
-    while (((int) esp) % WORD_SIZE != 0) {
-      *esp = '\0';
-      esp--;
+    while (((int) *esp) % WORD_SIZE != 0) {
+      * (unsigned int *) *esp = 0;
+      (*esp)--;
     }
 
     /* Stores stack address of the pointer in argv */
     /* CHECK THIS */
-    void *first_ptr = esp - (argc * WORD_SIZE);
+    void *first_ptr = *esp - (argc * WORD_SIZE);
 
     /* Push pointers to the arguments, one by one, in reverse order */
     count = argc - 1;
     while (count >= 0) {
-      *esp = &argv[count];
-      esp -= sizeof(&argv[count]);
+      * (char **) *esp = &argv[count];
+      *esp -= sizeof(&argv[count]);
       
       count--;
     }
 
     /* Push the pointer to the first pointer in argv */
-    *esp = first_ptr;
-    esp -= sizeof(first_ptr);
+    * (void **) *esp = first_ptr;
+    *esp -= sizeof(first_ptr);
 
     /* Push fake return address */
     int fake_adr_val = 0xD0C0FFEE;
     int *fake_adr = &fake_adr_val;
-    *esp = fake_adr;
-    esp -= sizeof(fake_adr);
+    * (unsigned int *) *esp = fake_adr;
+    *esp -= sizeof(fake_adr);
   }
+
+
 static bool
 test_set (bool *b) 
 {
