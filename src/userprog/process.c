@@ -616,7 +616,7 @@ push_all_to_stack (char **argv, int argc, struct intr_frame *if_)
     }
 
     /* Push the arguments, one by one, in reverse order */
-    int count = argc;
+    int count = argc - 1;
     while (count >= 0) {
       *esp = argv[count];
       esp -= sizeof(argv[count]);
@@ -634,7 +634,7 @@ push_all_to_stack (char **argv, int argc, struct intr_frame *if_)
     void *first_ptr = esp - (argc * WORD_SIZE);
 
     /* Push pointers to the arguments, one by one, in reverse order */
-    count = argc;
+    count = argc - 1;
     while (count >= 0) {
       *esp = &argv[count];
       esp -= sizeof(&argv[count]);
