@@ -656,8 +656,7 @@ push_all_to_stack (char **argv, int argc, struct intr_frame *if_)
     *esp -= sizeof(first_ptr);
 
     /* Push fake return address */
-    int fake_adr_val = 0xD0C0FFEE;
-    int *fake_adr = &fake_adr_val;
+    unsigned int fake_adr = 0xD0C0FFEE;
     * (unsigned int *) *esp = fake_adr;
     *esp -= sizeof(fake_adr);
   }
