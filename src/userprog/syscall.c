@@ -85,28 +85,10 @@ mem_try_write (uint8_t *udst, uint8_t byte)
 static void
 get_stack_args (struct intr_frame *f,  int *args, int num_of_args)
 {
-  int i;
-  int *pointer;
-  for (i = 0; i < num_of_args; i++){
-    pointer = (int *) f->esp + i + 1;
-    // validate pointer
-    args[i] = *pointer;
+  for (int i = 0; i < num_of_args; i++){
+    args[i] = * (int *) (f->esp + i*4 + 4);
   }
 }	
-
-
-/* gets page pointer using virtual address */
-static int 
-get_page_ptr(struct intr_frame *f)
-{
-  const void *vaddr = (const void *) f->esp;
-  void *ptr = pagedir_get_page(thread_current()->pagedir, vaddr);
-  if (!ptr)
-  {
-    sys_exit(f);
-  }
-  return (int) ptr;
-}
 
 /* Terminates Pintos by calling 
    shutdown_power_off() 
@@ -122,9 +104,11 @@ sys_halt (struct intr_frame *f UNUSED){
 static void 
 sys_exit (struct intr_frame *f){
   int args[MAX_ARGS];
-  int esp = get_page_ptr(f);
-  get_stack_args (f, &args[0], 1);
+  get_stack_args (f, args, 1);
   int status = args[0];
+
+  thread_current ()->wait_handler->exit_status = status;
+  process_exit ();
 }
 
 /* Runs executable whose name is given in the command line, 
@@ -134,18 +118,12 @@ static void
 sys_exec (struct intr_frame *f)
 {
   int args[MAX_ARGS];
-  int esp = get_page_ptr(f);
-  get_stack_args(f, &args[0], 1);
+  get_stack_args(f, args, 1);
 
-  /* check that arg[0] is valid */
-  /* validate_str((const void*) arg[0])*/
-  /* get page pointer */
-  args[0] = get_page_ptr (f);
-  /* pid_t exec (const char *cmd_line) */
   const char *cmd_line = (const char *) args[0];
-  /* formerly passed into the function as an argument */
 
-  /* reset f->eax after the function is over */
+  // TODO
+
   f->eax = -1;
 }
 
@@ -163,11 +141,9 @@ static void
 sys_wait (struct intr_frame *f)
 {
   int args[MAX_ARGS];
-  int esp = get_page_ptr(f);
-  get_stack_args(f, &args[0], 1);
-      /* int wait (pid t pid) */
-  pid_t pid = args[0]; /* previously passed as arg */
-  /* change the eax value (below) once sys_wait has been implemented */
+  get_stack_args(f, args, 1);
+  pid_t pid = args[0]; 
+  // TODO
   f->eax = -1;
 }
 
@@ -177,17 +153,10 @@ static void
 sys_create (struct intr_frame *f)
 {
   int args[MAX_ARGS];
-  int esp = get_page_ptr(f);
-
-  get_stack_args(f, &args[0], 1);
-
-  /* check that arg[0] is valid */
-  /* validate_str((const void*) arg[0])*/
-  args[0] = get_page_ptr (f);
-  /* bool create (const char *file, unsigned initial_size) */
+  get_stack_args(f, args, 2);
   const char *file = (const char *) args[0];
   unsigned initial_size = (unsigned) args[1];
-  /* change eax val (below) once sys_create has been completed */
+  // TODO
   f->eax = false;
 }
 
@@ -199,15 +168,9 @@ static void
 sys_remove (struct intr_frame *f)
 {
   int args[MAX_ARGS];
-  int esp = get_page_ptr(f);
-
-  get_stack_args(f, &args[0], 1);
-  /* check that arg[0] is valid */
-  /* validate_str((const void*) arg[0])*/
-  args[0] = get_page_ptr(f);
-  /* bool remove (const char *file) */
+  get_stack_args(f, args, 1);
   const char *file = (const char *) args[0];
-  /* change eax val (below) once sys_remove has been completed */
+  // TODO
   f->eax = false;
 }
 
@@ -218,16 +181,9 @@ static void
 sys_open (struct intr_frame *f)
 {
   int args[MAX_ARGS];
-  int esp = get_page_ptr(f);
-
-  get_stack_args(f, &args[0], 1);
-
-  /* check that arg[0] is valid */
-  /* validate_str((const void*) arg[0])*/
-  args[0] = get_page_ptr(f);
-  /* int open (const char *file) */
+  get_stack_args(f, args, 1);
   const char *file = (const char *) args[0];
-  /* change eax val (below) once sys_open has been completed */
+  // TODO
   f->eax = 0;
 }
 
@@ -236,12 +192,9 @@ static void
 sys_filesize (struct intr_frame *f)
 {
   int args[MAX_ARGS];
-  int esp = get_page_ptr(f);
-
-  get_stack_args(f, &args[0], 1);
-  /* int filesize (int fd) */
+  get_stack_args(f, args, 1);
   int fd = args[0];
-  /* change eax val (below) once sys_filesize has been completed */
+  // TODO
   f->eax = 0;
 }
 
@@ -250,19 +203,11 @@ static void
 sys_read (struct intr_frame *f)
 {
   int args[MAX_ARGS];
-  int esp = get_page_ptr(f);
-
-  get_stack_args(f, &args[0], 3);
-  /* check that buffer is valid */
-  /* validate_buffer((const void *) arg[1], (unsigned) arg[2])*/
-  args[1] = get_page_ptr(f);
-  /* int read (int fd, void *buffer, unsigned size) */
-
-  /* Don't think I need the below
+  get_stack_args(f, args, 3);
   int fd = args[0];
   void *buffer = (void *) args[1];
-  unsigned size = (unsigned) args[2];*/
-   /* change eax val (below) once sys_remove has been completed */
+  unsigned size = (unsigned) args[2];
+  // TODO
   f->eax = 0;
 }
 
@@ -272,22 +217,13 @@ static void
 sys_write (struct intr_frame *f)
 {
   int args[MAX_ARGS];
-  int esp = get_page_ptr(f);
-
-  get_stack_args(f, &args[0], 3);
-  /* check that buffer is valid */
-  /* validate_buffer((const void *) arg[1], (unsigned) arg[2])*/
-  args[1] = get_page_ptr(f);
-  /* int write (int fd, const void *buffer, unsigned size) */
-  int fd = args[0];
+  get_stack_args(f, args, 3);
+  int fd = (int) args[0];
   const void *buffer = (const void *) args[1];
   unsigned size = (unsigned) args[2];
-  /* change eax val (below) once sys_remove has been completed */
-  /* the below code has been commented out as there's no current mapping between file and fd */
 
-  /* struct file *file = thread_current()->file_name; */
   int written_size = 0;
-  if (fd == 1){
+  if (fd == STDOUT_FILENO){
     while (size > 300){
       putbuf (buffer, 300);
       buffer += 300;
@@ -296,9 +232,10 @@ sys_write (struct intr_frame *f)
     putbuf (buffer, size - written_size);
     written_size = size;
   }
+  // TODO
   /*
   else {
-	  //file_write (struct file *file, const void *buffer, off_t size)
+        file_write (struct file *file, const void *buffer, off_t size)
 	written_size = file_write (file, (const void *) args[1], (unsigned) args[2]);
   } */
 
@@ -310,12 +247,10 @@ from the beginning of the file. */
 static void 
 sys_seek (struct intr_frame *f) {
   int args[MAX_ARGS];
-  int esp = get_page_ptr(f);
-
-  get_stack_args(f, &args[0], 2);
-  /* void seek (int fd, unsigned position) */
+  get_stack_args(f, args, 2);
   int fd = args[0];
   unsigned position = (unsigned) args[1];
+  // TODO
 }
 
 /* Returns the position of the next byte to be read or written in open file fd */
@@ -323,11 +258,11 @@ static void
 sys_tell (struct intr_frame *f)
 {
   int args[MAX_ARGS];
-  int esp = get_page_ptr(f);
-  get_stack_args(f, &args[0], 1);
-  /* unsigned tell (int fd) */
+  get_stack_args(f, args, 1);
   int fd = args[0];
-  /* change eax val (below) once sys_remove has been completed */
+  
+  // TODO
+
   f->eax = -1;
 }
 
@@ -335,10 +270,8 @@ sys_tell (struct intr_frame *f)
 static void 
 sys_close (struct intr_frame *f){
   int args[MAX_ARGS];
-  int esp = get_page_ptr(f);
-
-  get_stack_args(f, &args[0], 1);
-  /* void close (int fd) */
+  get_stack_args(f, args, 1);
+  // TODO
   int fd = args[0];
 }
 
@@ -351,7 +284,6 @@ syscall_handler (struct intr_frame *f)
     FILESYS_LOCK_ACQUIRE = true;
   }
 
-  int esp = get_page_ptr(f);
   void (*sys_functions_arr[])(struct intr_frame *f) = {sys_halt, sys_exit, sys_exec, sys_wait,
 	sys_create, sys_remove, sys_open, sys_filesize, sys_read, sys_write, sys_seek, sys_tell, sys_close};
 
@@ -359,11 +291,10 @@ syscall_handler (struct intr_frame *f)
   /* funcs returning a value are sys_exec, sys_wait, sys_create, sys_remove,
   sys_open, sys_filesize, sys_read, sys_write, sys_tell */
 
-  if ((* (int *) esp) < SYS_INUMBER)
-  { /* checks that esp is an enum */
-    (*sys_functions_arr[(* (int *) esp)])(f);
-  }
-
-  printf ("system call!\n");
-  thread_exit ();
+  /* checks that esp is an enum */
+  int syscall_no = * (int *) f->esp;
+  if (syscall_no < SYS_INUMBER)
+    {
+      (*sys_functions_arr[syscall_no])(f);
+    }
 }
