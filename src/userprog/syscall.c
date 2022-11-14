@@ -16,7 +16,6 @@
 #define MAX_ARGS 3
 
 static void syscall_handler (struct intr_frame *);
-static void sys_exit (struct intr_frame *f);
 
 bool FILESYS_LOCK_ACQUIRE = false;
 
@@ -82,26 +81,28 @@ mem_try_write (uint8_t *udst, uint8_t byte)
 }
 
 /* gets arguments from the stack and stores them in the array args */
-static void
+static int
 get_stack_args (struct intr_frame *f,  int *args, int num_of_args)
 {
   for (int i = 0; i < num_of_args; i++){
     args[i] = * (int *) (f->esp + i*4 + 4);
   }
+  return 0;
 }	
 
 /* Terminates Pintos by calling 
    shutdown_power_off() 
 */
-static void 
+static int 
 sys_halt (struct intr_frame *f UNUSED){
   shutdown_power_off();
+  return 0;
 }
 
 /* Terminates the current user program and sends exit status to kernel.
    A status of 0 is a success.
 */
-static void 
+static int 
 sys_exit (struct intr_frame *f){
   int args[MAX_ARGS];
   get_stack_args (f, args, 1);
@@ -109,12 +110,13 @@ sys_exit (struct intr_frame *f){
 
   thread_current ()->wait_handler->exit_status = status;
   process_exit ();
+  return 0;
 }
 
 /* Runs executable whose name is given in the command line, 
    passing given args and returns the new process's pid
 */
-static void 
+static pid_t 
 sys_exec (struct intr_frame *f)
 {
   int args[MAX_ARGS];
@@ -124,7 +126,7 @@ sys_exec (struct intr_frame *f)
 
   // TODO
 
-  f->eax = -1;
+  return -1;
 }
 
 /* Waits for a child process pid and retrieves the child’s exit status.
@@ -137,19 +139,19 @@ sys_exec (struct intr_frame *f)
    If pid is not a direct child of the calling process, wait fails and returns –1.
 
    If the process calling wait has already called it, wait fails and returns -1*/
-static void 
+static int 
 sys_wait (struct intr_frame *f)
 {
   int args[MAX_ARGS];
   get_stack_args(f, args, 1);
   pid_t pid = args[0]; 
   // TODO
-  f->eax = -1;
+  return -1;
 }
 
 /* Creates a new file called file with size initial_size bytes.
    Returns true if successful and false otherwise. */
-static void 
+static int 
 sys_create (struct intr_frame *f)
 {
   int args[MAX_ARGS];
@@ -157,49 +159,49 @@ sys_create (struct intr_frame *f)
   const char *file = (const char *) args[0];
   unsigned initial_size = (unsigned) args[1];
   // TODO
-  f->eax = false;
+  return 0; // as false is equivalent to 0 in c
 }
 
 
 /* Deletes file 
    Returns true if successful and false otherwise.
    If the file is currently open, it remains open after removal */
-static void 
+static int 
 sys_remove (struct intr_frame *f)
 {
   int args[MAX_ARGS];
   get_stack_args(f, args, 1);
   const char *file = (const char *) args[0];
   // TODO
-  f->eax = false;
+  return 0;
 }
 
 /* Tries to open the file.
    If successful, the function returns -1.
    Otherwise, it returns the file descriptor. */
-static void 
+static int 
 sys_open (struct intr_frame *f)
 {
   int args[MAX_ARGS];
   get_stack_args(f, args, 1);
   const char *file = (const char *) args[0];
   // TODO
-  f->eax = 0;
+  return 0;
 }
 
 /* Returns the size, in bytes, of the file open as fd.*/
-static void 
+static int 
 sys_filesize (struct intr_frame *f)
 {
   int args[MAX_ARGS];
   get_stack_args(f, args, 1);
   int fd = args[0];
   // TODO
-  f->eax = 0;
+  return 0;
 }
 
 /* Reads size bytes from the file open as fd into buffer */
-static void 
+static int 
 sys_read (struct intr_frame *f)
 {
   int args[MAX_ARGS];
@@ -208,12 +210,13 @@ sys_read (struct intr_frame *f)
   void *buffer = (void *) args[1];
   unsigned size = (unsigned) args[2];
   // TODO
-  f->eax = 0;
+  int read_size = 0;
+  return read_size;
 }
 
 /* Writes size bytes from buffer to the open file fd. Returns the number of bytes actually
    written, which may be less than size if some bytes could not be written */
-static void 
+static int 
 sys_write (struct intr_frame *f)
 {
   int args[MAX_ARGS];
@@ -239,22 +242,23 @@ sys_write (struct intr_frame *f)
 	written_size = file_write (file, (const void *) args[1], (unsigned) args[2]);
   } */
 
-  f->eax = written_size;
+  return written_size;
 }
 
 /* Changes the next byte to be read or written in open file fd to position, expressed in bytes
 from the beginning of the file. */
-static void 
+static int
 sys_seek (struct intr_frame *f) {
   int args[MAX_ARGS];
   get_stack_args(f, args, 2);
   int fd = args[0];
   unsigned position = (unsigned) args[1];
   // TODO
+  return 0;
 }
 
 /* Returns the position of the next byte to be read or written in open file fd */
-static void 
+static int 
 sys_tell (struct intr_frame *f)
 {
   int args[MAX_ARGS];
@@ -262,17 +266,17 @@ sys_tell (struct intr_frame *f)
   int fd = args[0];
   
   // TODO
-
-  f->eax = -1;
+  return 0;
 }
 
 /* Closes file descriptor fd.*/
-static void 
+static int 
 sys_close (struct intr_frame *f){
   int args[MAX_ARGS];
   get_stack_args(f, args, 1);
   // TODO
   int fd = args[0];
+  return 0;
 }
 
 static void
@@ -284,7 +288,7 @@ syscall_handler (struct intr_frame *f)
     FILESYS_LOCK_ACQUIRE = true;
   }
 
-  void (*sys_functions_arr[])(struct intr_frame *f) = {sys_halt, sys_exit, sys_exec, sys_wait,
+  int (*sys_functions_arr[])(struct intr_frame *f) = {sys_halt, sys_exit, sys_exec, sys_wait,
 	sys_create, sys_remove, sys_open, sys_filesize, sys_read, sys_write, sys_seek, sys_tell, sys_close};
 
   /* need to find a way to see which functions return a value and set f->eax to it */
@@ -295,6 +299,6 @@ syscall_handler (struct intr_frame *f)
   int syscall_no = * (int *) f->esp;
   if (syscall_no < SYS_INUMBER)
     {
-      (*sys_functions_arr[syscall_no])(f);
+      f->eax = (*sys_functions_arr[syscall_no])(f);
     }
 }
