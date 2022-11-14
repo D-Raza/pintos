@@ -161,6 +161,7 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
+
   /* Free all processes in the child_processes list */
   while (!list_empty (&cur->child_processes)) {
     struct list_elem *e = list_pop_front (&cur->child_processes);
@@ -658,11 +659,11 @@ push_all_to_stack (char **argv, int argc, struct intr_frame *if_)
 
     /* Push the number of arguments */
     * (int *) *esp = argc;
+    *esp -= sizeof(argc);
 
     /* Push fake return address */
     unsigned int fake_adr = 0xD0C0FFEE;
     * (unsigned int *) *esp = fake_adr;
-    *esp -= sizeof(fake_adr);
   }
 
 
