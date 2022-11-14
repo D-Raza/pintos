@@ -263,10 +263,9 @@ syscall_handler (struct intr_frame *f)
     FILESYS_LOCK_ACQUIRE = true;
   }
 
-  int (*sys_functions_arr[])(int args[]) = {sys_halt, sys_exit, sys_exec, sys_wait,
-	sys_create, sys_remove, sys_open, sys_filesize, sys_read, sys_write, sys_seek, sys_tell, sys_close};
-
-  int arg_nums[] = {0, 1, 1, 1, 2, 1, 1, 1, 3, 3, 2, 1 ,1};
+  struct syscalls sys_functions[] = {{sys_halt, 0}, {sys_exit, 1}, {sys_exec, 1}, {sys_wait, 1},
+	  {sys_create, 2}, {sys_remove, 1}, {sys_open, 1}, {sys_filesize, 1}, {sys_read, 3},
+	  {sys_write, 3}, {sys_seek, 2}, {sys_tell, 1}, {sys_close, 1}};
 
   /* need to find a way to see which functions return a value and set f->eax to it */
   /* funcs returning a value are sys_exec, sys_wait, sys_create, sys_remove,
@@ -276,8 +275,8 @@ syscall_handler (struct intr_frame *f)
   int syscall_no = * (int *) f->esp;
   if (syscall_no < SYS_INUMBER)
     {
-      int args[arg_nums[syscall_no]];
-      get_stack_args(f, args, arg_nums[syscall_no]);
-      f->eax = (*sys_functions_arr[syscall_no])(args);
+      int args[sys_functions[syscall_no].num_of_args];
+      get_stack_args(f, args, sys_functions[syscall_no].num_of_args);
+      f->eax = (*sys_functions[syscall_no].sys_call)(args);
     }
 }
