@@ -32,10 +32,10 @@ static void push_all_to_stack (char **argv, int argc, struct intr_frame *if_);
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
 tid_t
-process_execute (const char *file_name) 
+process_execute (const char *cmd) 
 {
-  char *fn_copy;
-  tid_t tid;
+  char *cmd_copy;
+  tid_t tid = TID_ERROR;
 
   struct thread *cur = thread_current ();
   struct wait_handler *wh = malloc (sizeof (struct wait_handler));
@@ -45,22 +45,32 @@ process_execute (const char *file_name)
     wh->tid = TID_ERROR;
     wh->destroy = 0;
     wh->exit_status = -1;
-    // Check that the file name is less than 14 characters 
-    // Add a check for if the tokenized arg length is less than 140
-  }
-  list_push_back (&cur->child_processes, &wh->elem);
-  /* Make a copy of FILE_NAME.
-     Otherwise there's a race between the caller and load(). */
-  fn_copy = palloc_get_page (0);
-  if (fn_copy == NULL)
-    return TID_ERROR;
-  strlcpy (fn_copy, file_name, PGSIZE);
+    list_push_back (&cur->child_processes, &wh->elem);
 
-  /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
-  wh->tid = tid;
-  if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
+    char *save_ptr;
+    cmd_copy = palloc_get_page (0);
+    if (cmd_copy == NULL)
+      return TID_ERROR;
+    strlcpy (cmd_copy, cmd, PGSIZE);
+    char *file_name = strtok_r (cmd_copy, " ", &save_ptr);
+    ASSERT (file_name != NULL);
+    
+    if (strlen (file_name) > 14 || !filesys_open (file_name))
+      return TID_ERROR; 
+
+    tid = thread_create (file_name, PRI_DEFAULT, start_process, cmd_copy, wh);
+    wh->tid = tid;
+
+    if (tid == TID_ERROR)
+        list_remove (&wh->elem);
+	if (test_set (&wh->destroy)) 
+		free (wh);
+	palloc_free_page (cmd_copy);
+	return TID_ERROR;
+      }
+
+    
+  } 
   return tid;
 }
 
@@ -133,6 +143,7 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid) 
 {
+  printf("waiting on %d", child_tid);
   struct list *child_processes = &thread_current ()->child_processes;
   struct wait_handler *child_process;
 
