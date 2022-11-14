@@ -656,6 +656,9 @@ push_all_to_stack (char **argv, int argc, struct intr_frame *if_)
     * (void **) *esp = first_ptr;
     *esp -= sizeof(first_ptr);
 
+    /* Push the number of arguments */
+    * (int *) *esp = argc;
+
     /* Push fake return address */
     unsigned int fake_adr = 0xD0C0FFEE;
     * (unsigned int *) *esp = fake_adr;
