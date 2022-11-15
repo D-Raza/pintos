@@ -633,9 +633,11 @@ push_all_to_stack (char **argv, int argc, struct intr_frame *if_)
     /* Push the arguments, one by one, in reverse order */
     int count = argc - 1;
     while (count >= 0) {
-      push_to_stack(argv[count], esp, true);
+      int size = strlen(argv[count]) + 1;
+      *esp -= size;
+      strlcpy ((char *) *esp, argv[count], size);
       arg_ptrs[count] = *esp;
-      *esp -= strlen(argv[count]) + 1;
+      *esp -= size;
       count--;
     }
 
@@ -681,14 +683,3 @@ test_set (bool *b)
 {
   return __sync_lock_test_and_set (b, true);
 }
-
-
-void 
-push_to_stack (void *to_push, void **esp, bool is_str_push) 
-  {
-    if (is_str_push) {
-      int size = strlen(to_push) + 1;
-      *esp -= size;
-      strlcpy ((char *) *esp, to_push, size);
-    } 
-  }
