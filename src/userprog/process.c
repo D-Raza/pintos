@@ -646,18 +646,15 @@ push_all_to_stack (char **argv, int argc, struct intr_frame *if_)
     /* Push the arguments, one by one, in reverse order */
     int count = argc - 1;
     while (count >= 0) {
-      int size = strlen(argv[count]) + 1;
-      *esp -= size;
-      strlcpy ((char *) *esp, argv[count], size);
+      push_to_stack(argv[count], esp, true);
       arg_ptrs[count] = *esp;
-      *esp -= size;
+      *esp -= strlen(argv[count]) + 1;
       count--;
     }
 
     /* Push a null pointer sentinel (0) until the address is word-aligned */
     while (((int) *esp) % WORD_SIZE != 0) {
-      * (unsigned int *) *esp = 0;
-      (*esp)--;
+      push_to_stack(0, esp, false);
     }
 
     /* Stores stack address of the pointer in argv */
@@ -665,25 +662,20 @@ push_all_to_stack (char **argv, int argc, struct intr_frame *if_)
     void *first_ptr = *esp - (argc * WORD_SIZE);
 
     /* Push sentinel entry */
-    * (int *) *esp = 0x00000000;
-    (*esp) -= sizeof (0x00000000);
+    push_to_stack(0x00000000, esp, false);
 
     /* Push pointers to the arguments, one by one, in reverse order */
     count = argc - 1;
     while (count >= 0) {
-      * (char **) *esp = arg_ptrs[count];
-      *esp -= sizeof(arg_ptrs[count]);
-      
+      push_to_stack(arg_ptrs[count], esp, false);      
       count--;
     }
 
     /* Push the pointer to the first pointer in argv */
-    * (void **) *esp = first_ptr;
-    *esp -= sizeof(first_ptr);
+    push_to_stack(first_ptr, esp, false);
 
     /* Push the number of arguments */
-    * (int *) *esp = argc;
-    *esp -= sizeof(argc);
+    push_to_stack(argc, esp, false);
 
     /* Push fake return address */
     unsigned int fake_adr = 0xD0C0FFEE;
@@ -696,3 +688,15 @@ test_set (bool *b)
 {
   return __sync_lock_test_and_set (b, true);
 }
+
+void push_to_stack (void *to_push, void **esp, bool is_str_push) {
+   if (is_str_push) {
+     int size = strlen(to_push) + 1;
+     *esp -= size;
+     strlcpy ((char *) *esp, to_push, size);
+   } else {
+     *esp -= sizeof(to_push);
+     * (void **) *esp = to_push;
+   }
+ }
+
