@@ -20,6 +20,7 @@
 #include "threads/vaddr.h"
 
 static thread_func start_process NO_RETURN;
+static thread_func start_child_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 static bool test_set (bool *b);
 
@@ -58,13 +59,17 @@ process_execute (const char *cmd)
     if (strlen (file_name) > 14 || !filesys_open (file_name))
       return TID_ERROR; 
 
-    tid = thread_create (file_name, PRI_DEFAULT, start_process, cmd_copy, wh);
+    struct process_start_aux *psa = malloc (sizeof (struct process_start_aux));
+    psa->filename = cmd_copy;
+    psa->wait_handler = wh;
+    tid = thread_create (file_name, PRI_DEFAULT, start_child_process, psa);
     wh->tid = tid;
 
     if (tid == TID_ERROR)
+      {
         list_remove (&wh->elem);
-	if (test_set (&wh->destroy)) 
-          free (wh);
+        if (test_set (&wh->destroy))
+	  free (wh);
 	palloc_free_page (cmd_copy);
 	return TID_ERROR;
       }
@@ -74,10 +79,19 @@ process_execute (const char *cmd)
   return tid;
 }
 
+static void
+start_child_process (void *psa_aux)
+{
+  struct process_start_aux psa = * (struct process_start_aux *)psa_aux;
+  free (psa_aux);
+  thread_current()-> wait_handler = psa.wait_handler;
+  start_process (psa.filename); 
+}
+
 /* A thread function that loads a user process and starts it
    running. */
 static void
-start_process (void *file_name_)
+start_process (void* file_name_)
 {
   char *file_name = file_name_;
   struct intr_frame if_;
@@ -143,7 +157,6 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid) 
 {
-  printf("waiting on %d", child_tid);
   struct list *child_processes = &thread_current ()->child_processes;
   struct wait_handler *child_process;
 
@@ -154,12 +167,13 @@ process_wait (tid_t child_tid)
       if (child_process->tid == child_tid)
         {
           sema_down (&child_process->wait_sema);
-          list_remove(&child_process->elem);
+	  int exit_status = child_process->exit_status;
+	  list_remove(&child_process->elem);
           if (test_set(&child_process->destroy))
             {
-              free(child_process);
+              free (child_process);
             }
-          return child_process->exit_status;
+          return exit_status;
         }
   }
   return -1;
@@ -175,20 +189,12 @@ process_exit (void)
 
   /* Free all processes in the child_processes list */
   while (!list_empty (&cur->child_processes)) {
-    struct list_elem *e = list_pop_front (&cur->child_processes);
     struct wait_handler *child_process = list_entry (list_pop_front (&cur->child_processes), struct wait_handler, elem);
     if (test_set(&child_process->destroy))
       {
-        free(child_process);
+	free (child_process);
       }
   }
-
-  sema_up (&cur->wait_handler->wait_sema);
-  if (test_set(&cur->wait_handler->destroy))
-    {
-      free(cur->wait_handler);
-    }
-
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
@@ -207,6 +213,13 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+  sema_up (&cur->wait_handler->wait_sema);
+
+  if (test_set(&cur->wait_handler->destroy))
+    {
+      free(cur->wait_handler);
+    }
+
 }
 
 /* Sets up the CPU for running user code in the current

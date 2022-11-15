@@ -22,4 +22,9 @@ struct wait_handler
   struct list_elem elem;        /* List element */
 };
 
+struct process_start_aux
+{
+  void *filename;
+  struct wait_handler* wait_handler;
+};
 #endif /* userprog/process.h */
