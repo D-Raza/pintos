@@ -576,6 +576,7 @@ init_thread (struct thread *t, const char *name, int priority)
     }
 #ifdef USERPROG
   list_init (&t->child_processes);
+  list_init (&t->open_fds);
 #endif
   t->magic = THREAD_MAGIC;
 
