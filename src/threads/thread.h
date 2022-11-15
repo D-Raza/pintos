@@ -114,9 +114,10 @@ struct thread
     tid_t parent_thread;                /* Parent thread */
     struct list child_processes;        /* List of child processes */
     struct wait_handler *wait_handler;  /* Handles the wait/exit status of the child  */
+#endif
+
     struct list open_fds;		/* List of files opened by the thread */
     struct list_elem open_fd;		/* Fd of open file */
-#endif
 
 
     /* Owned by thread.c. */
@@ -162,6 +163,7 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+int *thread_get_fd (int *fd);
 
 bool thread_priority_higher (const struct list_elem *l1_raw, 
       const struct list_elem *l2_raw, void *aux UNUSED);
