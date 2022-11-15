@@ -20,6 +20,7 @@
 #include "threads/vaddr.h"
 
 static thread_func start_process NO_RETURN;
+static thread_func start_child_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 static bool test_set (bool *b);
 
@@ -32,10 +33,10 @@ static void push_all_to_stack (char **argv, int argc, struct intr_frame *if_);
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
 tid_t
-process_execute (const char *file_name) 
+process_execute (const char *cmd) 
 {
-  char *fn_copy;
-  tid_t tid;
+  char *cmd_copy;
+  tid_t tid = TID_ERROR;
 
   struct thread *cur = thread_current ();
   struct wait_handler *wh = malloc (sizeof (struct wait_handler));
@@ -45,29 +46,52 @@ process_execute (const char *file_name)
     wh->tid = TID_ERROR;
     wh->destroy = 0;
     wh->exit_status = -1;
-    // Check that the file name is less than 14 characters 
-    // Add a check for if the tokenized arg length is less than 140
-  }
-  list_push_back (&cur->child_processes, &wh->elem);
-  /* Make a copy of FILE_NAME.
-     Otherwise there's a race between the caller and load(). */
-  fn_copy = palloc_get_page (0);
-  if (fn_copy == NULL)
-    return TID_ERROR;
-  strlcpy (fn_copy, file_name, PGSIZE);
+    list_push_back (&cur->child_processes, &wh->elem);
 
-  /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
-  wh->tid = tid;
-  if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
+    char *save_ptr;
+    cmd_copy = palloc_get_page (0);
+    if (cmd_copy == NULL)
+      return TID_ERROR;
+    strlcpy (cmd_copy, cmd, PGSIZE);
+    char *file_name = strtok_r (cmd, " ", &save_ptr);
+    ASSERT (file_name != NULL);
+    
+    if (strlen (file_name) > 14 || !filesys_open (file_name))
+      return TID_ERROR; 
+
+    struct process_start_aux *psa = malloc (sizeof (struct process_start_aux));
+    psa->filename = cmd_copy;
+    psa->wait_handler = wh;
+    tid = thread_create (file_name, PRI_DEFAULT, start_child_process, psa);
+    wh->tid = tid;
+
+    if (tid == TID_ERROR)
+      {
+        list_remove (&wh->elem);
+        if (test_set (&wh->destroy))
+	  free (wh);
+	palloc_free_page (cmd_copy);
+	return TID_ERROR;
+      }
+
+    
+  } 
   return tid;
+}
+
+static void
+start_child_process (void *psa_aux)
+{
+  struct process_start_aux psa = * (struct process_start_aux *)psa_aux;
+  free (psa_aux);
+  thread_current()-> wait_handler = psa.wait_handler;
+  start_process (psa.filename); 
 }
 
 /* A thread function that loads a user process and starts it
    running. */
 static void
-start_process (void *file_name_)
+start_process (void* file_name_)
 {
   char *file_name = file_name_;
   struct intr_frame if_;
@@ -86,13 +110,13 @@ start_process (void *file_name_)
      tokens contains the arguements as its elements*/
   char *tokens[argc];
   tokenize_args (file_name, tokens);
-
+  
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+  success = load (tokens[0], &if_.eip, &if_.esp);
 
   /* If file loaded successfully, set up stack */
   if (success)  
@@ -143,12 +167,13 @@ process_wait (tid_t child_tid)
       if (child_process->tid == child_tid)
         {
           sema_down (&child_process->wait_sema);
-          list_remove(&child_process->elem);
+	  int exit_status = child_process->exit_status;
+	  list_remove(&child_process->elem);
           if (test_set(&child_process->destroy))
             {
-              free(&child_process);
+              free (child_process);
             }
-          return child_process->exit_status;
+          return exit_status;
         }
   }
   return -1;
@@ -161,22 +186,15 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
+
   /* Free all processes in the child_processes list */
   while (!list_empty (&cur->child_processes)) {
-    struct list_elem *e = list_pop_front (&cur->child_processes);
     struct wait_handler *child_process = list_entry (list_pop_front (&cur->child_processes), struct wait_handler, elem);
     if (test_set(&child_process->destroy))
       {
-        free(&child_process);
+	free (child_process);
       }
   }
-
-  sema_up (&cur->wait_handler->wait_sema);
-  if (test_set(&cur->wait_handler->destroy))
-    {
-      free(&cur->wait_handler);
-    }
-
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
@@ -195,6 +213,13 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+  sema_up (&cur->wait_handler->wait_sema);
+
+  if (test_set(&cur->wait_handler->destroy))
+    {
+      free(cur->wait_handler);
+    }
+
 }
 
 /* Sets up the CPU for running user code in the current
@@ -656,10 +681,13 @@ push_all_to_stack (char **argv, int argc, struct intr_frame *if_)
     * (void **) *esp = first_ptr;
     *esp -= sizeof(first_ptr);
 
+    /* Push the number of arguments */
+    * (int *) *esp = argc;
+    *esp -= sizeof(argc);
+
     /* Push fake return address */
     unsigned int fake_adr = 0xD0C0FFEE;
     * (unsigned int *) *esp = fake_adr;
-    *esp -= sizeof(fake_adr);
   }
 
 
