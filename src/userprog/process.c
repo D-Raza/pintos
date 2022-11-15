@@ -53,7 +53,7 @@ process_execute (const char *cmd)
     if (cmd_copy == NULL)
       return TID_ERROR;
     strlcpy (cmd_copy, cmd, PGSIZE);
-    char *file_name = strtok_r (cmd_copy, " ", &save_ptr);
+    char *file_name = strtok_r (cmd, " ", &save_ptr);
     ASSERT (file_name != NULL);
     
     if (strlen (file_name) > 14 || !filesys_open (file_name))
