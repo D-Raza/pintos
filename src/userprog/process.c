@@ -14,52 +14,121 @@
 #include "threads/flags.h"
 #include "threads/init.h"
 #include "threads/interrupt.h"
+#include "threads/malloc.h"
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
 static thread_func start_process NO_RETURN;
+static thread_func start_child_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+static bool test_set (bool *b);
+
+static void tokenize_args (char *file_name, char **argv);
+static int get_argc (char *file_name);
+static void push_all_to_stack (char **argv, int argc, struct intr_frame *if_);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
 tid_t
-process_execute (const char *file_name) 
+process_execute (const char *cmd) 
 {
-  char *fn_copy;
-  tid_t tid;
+  char *cmd_copy;
+  tid_t tid = TID_ERROR;
 
-  /* Make a copy of FILE_NAME.
-     Otherwise there's a race between the caller and load(). */
-  fn_copy = palloc_get_page (0);
-  if (fn_copy == NULL)
-    return TID_ERROR;
-  strlcpy (fn_copy, file_name, PGSIZE);
+  struct thread *cur = thread_current ();
+  struct wait_handler *wh = malloc (sizeof (struct wait_handler));
 
-  /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
+  if (wh) {
+    sema_init (&wh->wait_sema, 0);
+    wh->tid = TID_ERROR;
+    wh->destroy = 0;
+    wh->exit_status = -1;
+    list_push_back (&cur->child_processes, &wh->elem);
+
+    char *save_ptr;
+    cmd_copy = palloc_get_page (0);
+    if (cmd_copy == NULL)
+      return TID_ERROR;
+    strlcpy (cmd_copy, cmd, PGSIZE);
+    char *file_name = strtok_r (cmd, " ", &save_ptr);
+    ASSERT (file_name != NULL);
+    
+    if (strlen (file_name) > 14 || !filesys_open (file_name))
+      return TID_ERROR; 
+
+    struct process_start_aux *psa = malloc (sizeof (struct process_start_aux));
+    psa->filename = cmd_copy;
+    psa->wait_handler = wh;
+    tid = thread_create (file_name, PRI_DEFAULT, start_child_process, psa);
+    wh->tid = tid;
+
+    if (tid == TID_ERROR)
+      {
+        list_remove (&wh->elem);
+        if (test_set (&wh->destroy))
+	  free (wh);
+	palloc_free_page (cmd_copy);
+	return TID_ERROR;
+      }
+
+    
+  } 
   return tid;
+}
+
+static void
+start_child_process (void *psa_aux)
+{
+  struct process_start_aux psa = * (struct process_start_aux *)psa_aux;
+  free (psa_aux);
+  thread_current()-> wait_handler = psa.wait_handler;
+  start_process (psa.filename); 
 }
 
 /* A thread function that loads a user process and starts it
    running. */
 static void
-start_process (void *file_name_)
+start_process (void* file_name_)
 {
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
 
+  /* Check if number of args is a suitable amount (less than some macro) */
+  /* If not, then free, and kill */
+  int argc = get_argc (file_name);
+  if (argc >= MAX_ARG_LIMIT) 
+    {
+      palloc_free_page (file_name);
+      thread_exit ();
+    }
+
+  /* Tokenize file_name into an array of strings - make some helper function of sort - 
+     tokens contains the arguements as its elements*/
+  char *tokens[argc];
+  tokenize_args (file_name, tokens);
+  
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+  success = load (tokens[0], &if_.eip, &if_.esp);
+
+  /* If file loaded successfully, set up stack */
+  if (success)  
+    {
+      /* Push args on stack in reverse order */
+      /* Push argv[argc] = NULL (a null pointer) */  
+      /* In reverse order, push pointers to args on stack */
+      /* Push number of args: argc */
+      /* Push a fake return address (0) */
+      /* All handled by push_all_to_stack */
+      push_all_to_stack (tokens, argc, &if_);
+    }
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -86,8 +155,27 @@ start_process (void *file_name_)
  * This function will be implemented in task 2.
  * For now, it does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
+  struct list *child_processes = &thread_current ()->child_processes;
+  struct wait_handler *child_process;
+
+  for (struct list_elem *e = list_begin (child_processes); 
+        e != list_end (child_processes); 
+        e = list_next (e)) {
+      child_process = list_entry (e, struct wait_handler, elem);
+      if (child_process->tid == child_tid)
+        {
+          sema_down (&child_process->wait_sema);
+	  int exit_status = child_process->exit_status;
+	  list_remove(&child_process->elem);
+          if (test_set(&child_process->destroy))
+            {
+              free (child_process);
+            }
+          return exit_status;
+        }
+  }
   return -1;
 }
 
@@ -98,11 +186,22 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
+
+  /* Free all processes in the child_processes list */
+  while (!list_empty (&cur->child_processes)) {
+    struct wait_handler *child_process = list_entry (list_pop_front (&cur->child_processes), struct wait_handler, elem);
+    if (test_set(&child_process->destroy))
+      {
+	free (child_process);
+      }
+  }
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
   if (pd != NULL) 
     {
+      printf("%s: exit(%d)\n", cur->name, cur->wait_handler->exit_status);
+
       /* Correct ordering here is crucial.  We must set
          cur->pagedir to NULL before switching page directories,
          so that a timer interrupt can't switch back to the
@@ -114,6 +213,13 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+  sema_up (&cur->wait_handler->wait_sema);
+
+  if (test_set(&cur->wait_handler->destroy))
+    {
+      free(cur->wait_handler);
+    }
+
 }
 
 /* Sets up the CPU for running user code in the current
@@ -451,7 +557,7 @@ setup_stack (void **esp)
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
-        *esp = PHYS_BASE - 12;
+        *esp = PHYS_BASE;
       else
         palloc_free_page (kpage);
     }
@@ -476,4 +582,117 @@ install_page (void *upage, void *kpage, bool writable)
      address, then map our page there. */
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
+}
+
+/* Tokenizes the args into the array argv */
+static void 
+tokenize_args(char *file_name, char **argv) 
+  {
+    /* Use strlcpy to prevent mutation of original *file_name */
+    char *file_name_copy = malloc(strlen(file_name) + 1);
+    strlcpy (file_name_copy, file_name, strlen(file_name) + 1);
+
+    char *token, *save_ptr;
+    int i = 0;
+
+    for (token = strtok_r(file_name_copy, " ", &save_ptr); token != NULL; 
+         token = strtok_r(NULL, " ", &save_ptr)) {
+          argv[i] = token;
+          i++;
+    }
+  } 
+
+/* Returns the number of arguments + filename */
+static int
+get_argc (char *file_name)
+  {
+    /* Use strlcpy to prevent mutation of original *file_name */
+    char *file_name_copy = malloc(strlen(file_name) + 1);
+    strlcpy (file_name_copy, file_name, strlen(file_name) + 1);
+    
+    char *token, *save_ptr;
+
+    /* Initialise the number of arguments to 0 */
+    int argc = 0;
+
+    /* Iterate through the tokens, splitting at spaces, and increment the number of arguments */
+    for (token = strtok_r (file_name_copy, " ", &save_ptr); token != NULL;
+         token = strtok_r (NULL, " ", &save_ptr)) {
+          argc++;
+         }
+    return argc; 
+  }
+
+/* Pushes all that is required onto the stack:
+   1. arguments in reverse order
+   2. A null pointer sentinel (0)
+   3. Push pointers to args, in reverse order
+   4. Push a pointer to the first pointer
+   5. Push the number of arguments
+   6. Push a fake return address (0) */
+
+static void
+push_all_to_stack (char **argv, int argc, struct intr_frame *if_) 
+  {
+    void **esp = &if_->esp; 
+
+    char *arg_ptrs[argc];
+
+    /* Round the stack pointer down to a multiple of 4 before the first push onto the stack */
+    while (((int) *esp) % WORD_SIZE != 0) {
+      (*esp)--;
+    }
+
+    /* Push the arguments, one by one, in reverse order */
+    int count = argc - 1;
+    while (count >= 0) {
+      int size = strlen(argv[count]) + 1;
+      *esp -= size;
+      strlcpy ((char *) *esp, argv[count], size);
+      arg_ptrs[count] = *esp;
+      *esp -= size;
+      count--;
+    }
+
+    /* Push a null pointer sentinel (0) until the address is word-aligned */
+    while (((int) *esp) % WORD_SIZE != 0) {
+      * (unsigned int *) *esp = 0;
+      (*esp)--;
+    }
+
+    /* Stores stack address of the pointer in argv */
+    /* CHECK THIS */
+    void *first_ptr = *esp - (argc * WORD_SIZE);
+
+    /* Push sentinel entry */
+    * (int *) *esp = 0x00000000;
+    (*esp) -= sizeof (0x00000000);
+
+    /* Push pointers to the arguments, one by one, in reverse order */
+    count = argc - 1;
+    while (count >= 0) {
+      * (char **) *esp = arg_ptrs[count];
+      *esp -= sizeof(arg_ptrs[count]);
+      
+      count--;
+    }
+
+    /* Push the pointer to the first pointer in argv */
+    * (void **) *esp = first_ptr;
+    *esp -= sizeof(first_ptr);
+
+    /* Push the number of arguments */
+    * (int *) *esp = argc;
+    *esp -= sizeof(argc);
+
+    /* Push fake return address */
+    unsigned int fake_adr = 0xD0C0FFEE;
+    * (unsigned int *) *esp = fake_adr;
+  }
+
+
+static bool
+test_set (bool *b) 
+{
+  return __sync_lock_test_and_set (b, true);
 }

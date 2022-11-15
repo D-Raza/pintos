@@ -574,8 +574,9 @@ init_thread (struct thread *t, const char *name, int priority)
       list_init (&t->donors);
       t->recipient = NULL; 
     }
-
-  
+#ifdef USERPROG
+  list_init (&t->child_processes);
+#endif
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
@@ -850,3 +851,21 @@ void thread_calc_donate_priority (void)
     }
   t->priority = max_priority;
 }
+
+/*
+int thread_is_alive (int pid)
+{
+  struct list_elem *current;
+  struct list_elem *next;
+  for (current = list_begin (&all_list); current != list_end (&all_list); current = next)
+  {
+    next = list_next (e);
+    struct thread *t = list_entry (e, struct thread, allelem);
+    if (t->tid == pid)
+    {
+      return 1;
+    }
+  }
+  return 0;
+}
+*/
