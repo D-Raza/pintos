@@ -64,7 +64,7 @@ process_execute (const char *cmd)
     if (tid == TID_ERROR)
         list_remove (&wh->elem);
 	if (test_set (&wh->destroy)) 
-		free (wh);
+          free (wh);
 	palloc_free_page (cmd_copy);
 	return TID_ERROR;
       }
@@ -157,7 +157,7 @@ process_wait (tid_t child_tid)
           list_remove(&child_process->elem);
           if (test_set(&child_process->destroy))
             {
-              free(&child_process);
+              free(child_process);
             }
           return child_process->exit_status;
         }
@@ -179,14 +179,14 @@ process_exit (void)
     struct wait_handler *child_process = list_entry (list_pop_front (&cur->child_processes), struct wait_handler, elem);
     if (test_set(&child_process->destroy))
       {
-        free(&child_process);
+        free(child_process);
       }
   }
 
   sema_up (&cur->wait_handler->wait_sema);
   if (test_set(&cur->wait_handler->destroy))
     {
-      free(&cur->wait_handler);
+      free(cur->wait_handler);
     }
 
   /* Destroy the current process's page directory and switch back
