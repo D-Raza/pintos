@@ -13,7 +13,7 @@
 #include "filesys/file.h"
 #include "filesys/filesys.h"
 
-#define MAX_ARGS 3
+#define MAX_ARGS 10
 
 static void syscall_handler (struct intr_frame *);
 static void sys_exit (struct intr_frame *f);
