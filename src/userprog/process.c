@@ -648,7 +648,6 @@ push_all_to_stack (char **argv, int argc, struct intr_frame *if_)
     while (count >= 0) {
       push_to_stack(argv[count], esp, true);
       arg_ptrs[count] = *esp;
-      *esp -= strlen(argv[count]) + 1;
       count--;
     }
 
