@@ -16,6 +16,7 @@
 #define MAX_ARGS 3
 
 static void syscall_handler (struct intr_frame *);
+void validate_pointer (const void *vaddr, int args[]);
 
 bool FILESYS_LOCK_ACQUIRE = false;
 
@@ -85,7 +86,10 @@ static int
 get_stack_args (struct intr_frame *f,  int *args, int num_of_args)
 {
   for (int i = 0; i < num_of_args; i++){
-    args[i] = * (int *) (f->esp + i*4 + 4);
+    int *pointer = (int *) (f->esp + i*4 + 4);
+    validate_pointer ((const void *) pointer, args);
+    args[i] = *pointer;
+    // have some sort of error for invalid pointers
   }
   return 0;
 }	
@@ -254,6 +258,14 @@ sys_close (int args[]){
   return 0;
 }
 
+void validate_pointer (const void *vaddr, int args[])
+{
+  if (vaddr < PHYS_BASE || !is_user_vaddr(vaddr)) 
+  {
+    sys_halt(args); // to change to sys_exit (currently unfinished)
+  }
+}
+
 static void
 syscall_handler (struct intr_frame *f)
 {
@@ -267,7 +279,6 @@ syscall_handler (struct intr_frame *f)
 	  {sys_create, 2}, {sys_remove, 1}, {sys_open, 1}, {sys_filesize, 1}, {sys_read, 3},
 	  {sys_write, 3}, {sys_seek, 2}, {sys_tell, 1}, {sys_close, 1}};
 
-  /* need to find a way to see which functions return a value and set f->eax to it */
   /* funcs returning a value are sys_exec, sys_wait, sys_create, sys_remove,
   sys_open, sys_filesize, sys_read, sys_write, sys_tell */
 
