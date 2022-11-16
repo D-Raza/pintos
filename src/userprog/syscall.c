@@ -94,10 +94,35 @@ get_stack_args (struct intr_frame *f,  int *args, int num_of_args)
   }
 }	
 
+static struct fd_to_file_mapping*
+get_map (int fd)
+{
+  struct list *fds = &thread_current ()->open_fds;
+  if (list_empty (fds))
+    return NULL;
+  struct list_elem *e;
+  for (e = list_begin (fds); e != list_end (fds); e = list_next (e)) {
+    struct fd_to_file_mapping *map = list_entry (e, struct fd_to_file_mapping, elem);
+    if (map->fd == fd){
+      return map;
+    }
+  }
+  return NULL;
+}
+
+static struct file*
+get_file (int fd)
+{
+  struct fd_to_file_mapping *map = get_map (fd);
+  if (map != NULL)
+    return map->file_struct;
+  return NULL;
+}
+
 static int get_new_fd ()
 {
   thread_current () -> next_free_fd++;
-  return thread_current ()->next_free_fd;
+  return thread_current () ->next_free_fd;
 }
 
 /* Terminates Pintos by calling 
@@ -193,7 +218,10 @@ sys_open (int args[])
     return -1;
   }
   // Add file to struct and create fd
- 
+ struct fd_to_file_mapping *mapping = malloc (sizeof (struct fd_to_file_mapping));
+ mapping->fd = get_new_fd ();
+ mapping->file_struct = file;
+ list_push_back (&thread_current ()->open_fds, &mapping->elem);
  struct fd_to_file_mapping *mapping = malloc (sizeof (struct fd_to_file_mapping));
  mapping->fd = get_new_fd ();
  mapping->file_struct = file;
@@ -204,22 +232,6 @@ sys_open (int args[])
   return mapping->fd;
 }
 
-static struct file*
-get_file (int *fd)
-{
-  struct list *fds = &thread_current ()->open_fds;
-  if (list_empty (fds))
-    return NULL;
-  struct list_elem *e;
-  for (e = list_begin (fds); e != list_end (fds); e = list_next (e)) {
-    struct fd_to_file_mapping *map = list_entry (e, struct fd_to_file_mapping, elem);
-    if (map->fd == fd){
-      return map->file_struct;
-    }
-  }
-  return NULL;
-}
-  
 /* Returns the size, in bytes, of the file open as fd.*/
 static int 
 sys_filesize (int args[])
@@ -299,8 +311,14 @@ sys_tell (int args[])
 /* Closes file descriptor fd.*/
 static int 
 sys_close (int args[]){
-  // TODO
   int fd = args[0];
+  struct fd_to_file_mapping *map = get_map (fd);
+  if (map != NULL)
+    {
+      file_close (map->file_struct);
+      list_remove (&map->elem);
+      free (map);
+    }
   return 0;
 }
 
