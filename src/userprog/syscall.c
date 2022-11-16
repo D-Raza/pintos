@@ -91,6 +91,22 @@ get_stack_args (struct intr_frame *f,  int *args, int num_of_args)
   }
 }	
 
+static int *get_fd (int *fd)
+{
+  struct list_elem *e;
+  for (e = list_begin (&thread_current ()->open_fds); e != list_end (&thread_current ()->open_fds); e = list_next (e)) {
+    if ((int *) e == fd){
+      return fd;
+    }
+  }
+  return NULL;
+}
+
+static int get_new_fd ()
+{
+  return &thread_current ()->next_free_fd;
+}
+
 /* Terminates Pintos by calling 
    shutdown_power_off() 
 */

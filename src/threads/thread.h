@@ -114,11 +114,10 @@ struct thread
     tid_t parent_thread;                /* Parent thread */
     struct list child_processes;        /* List of child processes */
     struct wait_handler *wait_handler;  /* Handles the wait/exit status of the child  */
-#endif
-
     struct list open_fds;		/* List of files opened by the thread */
     struct list_elem open_fd;		/* Fd of open file */
-
+    int next_free_fd;			/* Next available fd */
+#endif
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
