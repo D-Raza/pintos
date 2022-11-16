@@ -623,6 +623,18 @@ get_argc (char *file_name)
     return argc; 
   }
 
+static void 
+push_to_stack (void *to_push, void **esp, bool is_str_push) {
+   if (is_str_push) {
+     int size = strlen(to_push) + 1;
+     *esp -= size;
+     strlcpy ((char *) *esp, to_push, size);
+   } else {
+     *esp -= sizeof(to_push);
+     * (void **) *esp = to_push;
+   }
+ }
+
 /* Pushes all that is required onto the stack:
    1. arguments in reverse order
    2. A null pointer sentinel (0)
@@ -646,48 +658,32 @@ push_all_to_stack (char **argv, int argc, struct intr_frame *if_)
     /* Push the arguments, one by one, in reverse order */
     int count = argc - 1;
     while (count >= 0) {
-      int size = strlen(argv[count]) + 1;
-      *esp -= size;
-      strlcpy ((char *) *esp, argv[count], size);
+      push_to_stack(argv[count], esp, true);
       arg_ptrs[count] = *esp;
-      *esp -= size;
       count--;
     }
 
-    /* Push a null pointer sentinel (0) until the address is word-aligned */
-    while (((int) *esp) % WORD_SIZE != 0) {
-      * (unsigned int *) *esp = 0;
-      (*esp)--;
-    }
-
-    /* Stores stack address of the pointer in argv */
-    /* CHECK THIS */
-    void *first_ptr = *esp - (argc * WORD_SIZE);
+    /* Move esp so that the address is word-aligned */ 
+    *esp -= (unsigned int) *esp % WORD_SIZE;
 
     /* Push sentinel entry */
-    * (int *) *esp = 0x00000000;
-    (*esp) -= sizeof (0x00000000);
+    push_to_stack((void*) 0x00000000, esp, false);
 
     /* Push pointers to the arguments, one by one, in reverse order */
     count = argc - 1;
     while (count >= 0) {
-      * (char **) *esp = arg_ptrs[count];
-      *esp -= sizeof(arg_ptrs[count]);
-      
+      push_to_stack(arg_ptrs[count], esp, false);      
       count--;
     }
 
-    /* Push the pointer to the first pointer in argv */
-    * (void **) *esp = first_ptr;
-    *esp -= sizeof(first_ptr);
+    /* Push the pointer to the first pointer in argv, (esp at the time of calling) */
+    push_to_stack(*esp, esp, false);
 
     /* Push the number of arguments */
-    * (int *) *esp = argc;
-    *esp -= sizeof(argc);
+    push_to_stack((void *) argc, esp, false);
 
     /* Push fake return address */
-    unsigned int fake_adr = 0xD0C0FFEE;
-    * (unsigned int *) *esp = fake_adr;
+    push_to_stack((void *) 0xD0C0FFEE, esp, false);
   }
 
 
@@ -696,3 +692,4 @@ test_set (bool *b)
 {
   return __sync_lock_test_and_set (b, true);
 }
+
