@@ -313,3 +313,14 @@ syscall_handler (struct intr_frame *f)
       f->eax = (sys_functions[syscall_no].sys_call)(args);
   }
 }
+
+/* checks if the given file name is null, empty or more than 14 characters */
+static bool
+is_valid_file_name (char *file_name) 
+{
+  if (!file_name || strcmp(file_name, "") == 0 || strlen(file_name) > 14) {
+    return false;
+  }
+
+  return true;
+}
