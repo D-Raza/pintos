@@ -623,6 +623,17 @@ get_argc (char *file_name)
     return argc; 
   }
 
+void push_to_stack (void *to_push, void **esp, bool is_str_push) {
+   if (is_str_push) {
+     int size = strlen(to_push) + 1;
+     *esp -= size;
+     strlcpy ((char *) *esp, to_push, size);
+   } else {
+     *esp -= sizeof(to_push);
+     * (void **) *esp = to_push;
+   }
+ }
+
 /* Pushes all that is required onto the stack:
    1. arguments in reverse order
    2. A null pointer sentinel (0)
@@ -687,15 +698,4 @@ test_set (bool *b)
 {
   return __sync_lock_test_and_set (b, true);
 }
-
-void push_to_stack (void *to_push, void **esp, bool is_str_push) {
-   if (is_str_push) {
-     int size = strlen(to_push) + 1;
-     *esp -= size;
-     strlcpy ((char *) *esp, to_push, size);
-   } else {
-     *esp -= sizeof(to_push);
-     * (void **) *esp = to_push;
-   }
- }
 
