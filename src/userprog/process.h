@@ -1,7 +1,7 @@
 #ifndef USERPROG_PROCESS_H
 #define USERPROG_PROCESS_H
 
-#include "filesys/file.c"
+#include "filesys/file.h"
 #include "threads/thread.h"
 #include "threads/synch.h"
 
@@ -27,12 +27,6 @@ struct process_start_aux
 {
   void *filename;
   struct wait_handler* wait_handler;
-};
-
-struct fd_to_file_mapping {
-  int fd;                        /* file descriptor */
-  struct file file_struct;       /* file struct corresponding to fd */
-  struct list_elem elem;         /* List element */
 };
 
 #endif /* userprog/process.h */
