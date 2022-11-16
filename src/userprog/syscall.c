@@ -119,10 +119,8 @@ static pid_t
 sys_exec (int args[])
 {
   const char *cmd_line = (const char *) args[0];
+  return process_execute (cmd_line);
 
-  // TODO
-
-  return -1;
 }
 
 /* Waits for a child process pid and retrieves the child’s exit status.
@@ -139,8 +137,7 @@ static int
 sys_wait (int args[])
 {
   pid_t pid = args[0]; 
-  // TODO
-  return -1;
+  return process_wait (pid); 
 }
 
 /* Creates a new file called file with size initial_size bytes.
@@ -209,11 +206,11 @@ sys_write (int args[])
 
   int written_size = 0;
   if (fd == STDOUT_FILENO){
-    while (size > 300){
+    /*while (size > 300){
       putbuf (buffer, 300);
       buffer += 300;
       written_size += 300;
-    }
+    }*/
     putbuf (buffer, size - written_size);
     written_size = size;
   }
@@ -275,8 +272,9 @@ syscall_handler (struct intr_frame *f)
   int syscall_no = * (int *) f->esp;
   if (syscall_no < SYS_INUMBER)
     {
-      int args[sys_functions[syscall_no].num_of_args];
-      get_stack_args(f, args, sys_functions[syscall_no].num_of_args);
-      f->eax = (sys_functions[syscall_no].sys_call)(args);
+      //int args[sys_functions[syscall_no].num_of_args] = f->esp + 1;
+      int *args = f->esp + 4;
+      //get_stack_args(f, args, sys_functions[syscall_no].num_of_args);
+      f->eax = (sys_functions[syscall_no].sys_call)(args); 
     }
 }

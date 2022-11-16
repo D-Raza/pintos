@@ -53,7 +53,11 @@ process_execute (const char *cmd)
     if (cmd_copy == NULL)
       return TID_ERROR;
     strlcpy (cmd_copy, cmd, PGSIZE);
-    char *file_name = strtok_r (cmd, " ", &save_ptr);
+    
+    char *cmd_copy_2 = malloc(strlen(cmd) + 1);
+    strlcpy (cmd_copy_2, cmd, strlen(cmd) + 1);
+    char *file_name = strtok_r (cmd_copy_2, " ", &save_ptr);
+
     ASSERT (file_name != NULL);
     
     if (strlen (file_name) > 14 || !filesys_open (file_name))
@@ -68,8 +72,7 @@ process_execute (const char *cmd)
     if (tid == TID_ERROR)
       {
         list_remove (&wh->elem);
-        if (test_set (&wh->destroy))
-	  free (wh);
+	free (wh);
 	palloc_free_page (cmd_copy);
 	return TID_ERROR;
       }
@@ -218,6 +221,7 @@ process_exit (void)
   if (test_set(&cur->wait_handler->destroy))
     {
       free(cur->wait_handler);
+      cur->wait_handler = NULL;
     }
 
 }
