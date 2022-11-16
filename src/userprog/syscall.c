@@ -12,6 +12,7 @@
 #include "devices/shutdown.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
+#include <list.h>
 
 #define MAX_ARGS 3
 
@@ -104,7 +105,8 @@ static int *get_fd (int *fd)
 
 static int get_new_fd ()
 {
-  return &thread_current ()->next_free_fd;
+  thread_current () -> next_free_fd++;
+  return thread_current ()->next_free_fd;
 }
 
 /* Terminates Pintos by calling 
@@ -164,10 +166,13 @@ sys_wait (int args[])
 static int 
 sys_create (int args[])
 {
-  const char *file = (const char *) args[0];
+  const char *file_name = (const char *) args[0];
   unsigned initial_size = (unsigned) args[1];
-  // TODO
-  return 0; // as false is equivalent to 0 in c
+  /* Create new file struct containing file, which adds file to directory */
+  lock_acquire (&file_sys_lock);
+  bool created = filesys_create (file_name, initial_size);
+  lock_release (&file_sys_lock); 
+  return created; // as false is equivalent to 0 in c
 }
 
 
@@ -177,20 +182,32 @@ sys_create (int args[])
 static int 
 sys_remove (int args[])
 {
-  const char *file = (const char *) args[0];
-  // TODO
-  return 0;
+  const char *file_name = (const char *) args[0];
+  lock_acquire (&file_sys_lock);
+  bool removed = filesys_remove (file_name);
+  lock_release (&file_sys_lock);
+  return removed;
 }
 
 /* Tries to open the file.
-   If successful, the function returns -1.
-   Otherwise, it returns the file descriptor. */
+   If successful, the function returns the file descriptor.
+   Otherwise, it returns -1. */
 static int 
 sys_open (int args[])
 {
-  const char *file = (const char *) args[0];
-  // TODO
-  return 0;
+  const char *file_name = (const char *) args[0];
+  lock_acquire (&file_sys_lock);
+  struct file *file = filesys_open (file_name);
+  if (file == NULL) {
+    return -1;
+  }
+  // Add file to struct and create fd
+  struct fd_to_file_mapping mapping = {get_new_fd (), file, &thread_current ()->elem};
+  list_push_back (&thread_current ()->open_fds, &mapping.elem);
+//  thread_current ()->next_free_fd ++;// &thread_current ()->next_free_fd;
+
+  lock_release (&file_sys_lock);
+  return mapping.fd;
 }
 
 /* Returns the size, in bytes, of the file open as fd.*/
@@ -290,9 +307,9 @@ syscall_handler (struct intr_frame *f)
   /* checks that esp is an enum */
   int syscall_no = * (int *) f->esp;
   if (syscall_no < SYS_INUMBER)
-    {
+  {
       int args[sys_functions[syscall_no].num_of_args];
       get_stack_args(f, args, sys_functions[syscall_no].num_of_args);
       f->eax = (sys_functions[syscall_no].sys_call)(args);
-    }
+  }
 }
