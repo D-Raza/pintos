@@ -13,6 +13,7 @@
 #include "filesys/file.h"
 #include "filesys/filesys.h"
 #include <list.h>
+#include <string.h>
 
 #define MAX_ARGS 3
 
@@ -288,8 +289,6 @@ sys_close (int args[]){
   return 0;
 }
 
-<<<<<<< Updated upstream
-=======
 void validate_pointer (const void *vaddr, int args[])
 {
   if (vaddr < PHYS_BASE) 
@@ -298,7 +297,6 @@ void validate_pointer (const void *vaddr, int args[])
   }
 }
 
->>>>>>> Stashed changes
 static void
 syscall_handler (struct intr_frame *f)
 {
