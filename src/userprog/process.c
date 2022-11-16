@@ -666,7 +666,7 @@ push_all_to_stack (char **argv, int argc, struct intr_frame *if_)
     *esp -= (unsigned int) *esp % WORD_SIZE;
 
     /* Push sentinel entry */
-    push_to_stack(0x00000000, esp, false);
+    push_to_stack((void*) 0x00000000, esp, false);
 
     /* Push pointers to the arguments, one by one, in reverse order */
     count = argc - 1;
@@ -675,11 +675,11 @@ push_all_to_stack (char **argv, int argc, struct intr_frame *if_)
       count--;
     }
 
-    /* Push the pointer to the first pointer in argv */
-    push_to_stack(first_ptr, esp, false);
+    /* Push the pointer to the first pointer in argv, (esp at the time of calling) */
+    push_to_stack(*esp, esp, false);
 
     /* Push the number of arguments */
-    push_to_stack(argc, esp, false);
+    push_to_stack((void *) argc, esp, false);
 
     /* Push fake return address */
     push_to_stack((void *) 0xD0C0FFEE, esp, false);
