@@ -623,7 +623,8 @@ get_argc (char *file_name)
     return argc; 
   }
 
-void push_to_stack (void *to_push, void **esp, bool is_str_push) {
+static void 
+push_to_stack (void *to_push, void **esp, bool is_str_push) {
    if (is_str_push) {
      int size = strlen(to_push) + 1;
      *esp -= size;
