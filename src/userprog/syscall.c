@@ -301,8 +301,14 @@ sys_tell (int args[])
 /* Closes file descriptor fd.*/
 static int 
 sys_close (int args[]){
-  // TODO
   int fd = args[0];
+  struct fd_to_file_mapping *map = get_map (fd);
+  if (map != NULL)
+    {
+      file_close (map->file_struct);
+      list_remove (&map->elem);
+      free (map);
+    }
   return 0;
 }
 
