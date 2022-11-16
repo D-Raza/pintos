@@ -14,6 +14,7 @@
 #include "filesys/filesys.h"
 #include <list.h>
 #include <string.h>
+#include <stdlib.h>
 
 #define MAX_ARGS 3
 
@@ -203,12 +204,14 @@ sys_open (int args[])
     return -1;
   }
   // Add file to struct and create fd
-  struct fd_to_file_mapping mapping = {get_new_fd (), file, &thread_current ()->elem};
-  list_push_back (&thread_current ()->open_fds, &mapping.elem);
+  struct fd_to_file_mapping *mapping = malloc (sizeof (struct fd_to_file_mapping));
+  mapping->fd = get_new_fd ();
+  mapping->file_struct = file;
+  list_push_back (&thread_current ()->open_fds, &mapping->elem);
 //  thread_current ()->next_free_fd ++;// &thread_current ()->next_free_fd;
 
   lock_release (&file_sys_lock);
-  return mapping.fd;
+  return mapping->fd;
 }
 
 /* Returns the size, in bytes, of the file open as fd.*/
