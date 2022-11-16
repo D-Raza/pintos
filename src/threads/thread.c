@@ -459,17 +459,6 @@ thread_get_recent_cpu (void)
          (thread_current()->recent_cpu, 100));
 }
 
-int *thread_get_fd (int *fd)
-{
-  struct list_elem *e;
-  for (e = list_begin (&thread_current ()->open_fds); e != list_end (&thread_current ()->open_fds); e = list_next (e)) {
-    if ((int *) e == fd){
-      return fd;
-    }
-  }
-  return NULL;
-}
-
 /* Idle thread.  Executes when no other thread is ready to run.
 
    The idle thread is initially put on the ready list by
@@ -588,6 +577,7 @@ init_thread (struct thread *t, const char *name, int priority)
 #ifdef USERPROG
   list_init (&t->child_processes);
   list_init (&t->open_fds);
+  t->next_free_fd = 0;
 #endif
   t->magic = THREAD_MAGIC;
 
