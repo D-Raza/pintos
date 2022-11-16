@@ -12,6 +12,9 @@
 #include "devices/shutdown.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
+#include <list.h>
+#include <string.h>
+#include <stdlib.h>
 
 #define MAX_ARGS 3
 
@@ -91,6 +94,37 @@ get_stack_args (struct intr_frame *f,  int *args, int num_of_args)
   }
 }	
 
+static struct fd_to_file_mapping*
+get_map (int fd)
+{
+  struct list *fds = &thread_current ()->open_fds;
+  if (list_empty (fds))
+    return NULL;
+  struct list_elem *e;
+  for (e = list_begin (fds); e != list_end (fds); e = list_next (e)) {
+    struct fd_to_file_mapping *map = list_entry (e, struct fd_to_file_mapping, elem);
+    if (map->fd == fd){
+      return map;
+    }
+  }
+  return NULL;
+}
+
+static struct file*
+get_file (int fd)
+{
+  struct fd_to_file_mapping *map = get_map (fd);
+  if (map != NULL)
+    return map->file_struct;
+  return NULL;
+}
+
+static int get_new_fd ()
+{
+  thread_current () -> next_free_fd++;
+  return thread_current () ->next_free_fd;
+}
+
 /* Terminates Pintos by calling 
    shutdown_power_off() 
 */
@@ -145,10 +179,13 @@ sys_wait (int args[])
 static int 
 sys_create (int args[])
 {
-  const char *file = (const char *) args[0];
+  const char *file_name = (const char *) args[0];
   unsigned initial_size = (unsigned) args[1];
-  // TODO
-  return 0; // as false is equivalent to 0 in c
+  /* Create new file struct containing file, which adds file to directory */
+  lock_acquire (&file_sys_lock);
+  bool created = filesys_create (file_name, initial_size);
+  lock_release (&file_sys_lock); 
+  return created; // as false is equivalent to 0 in c
 }
 
 
@@ -158,20 +195,34 @@ sys_create (int args[])
 static int 
 sys_remove (int args[])
 {
-  const char *file = (const char *) args[0];
-  // TODO
-  return 0;
+  const char *file_name = (const char *) args[0];
+  lock_acquire (&file_sys_lock);
+  bool removed = filesys_remove (file_name);
+  lock_release (&file_sys_lock);
+  return removed;
 }
 
 /* Tries to open the file.
-   If successful, the function returns -1.
-   Otherwise, it returns the file descriptor. */
+   If successful, the function returns the file descriptor.
+   Otherwise, it returns -1. */
 static int 
 sys_open (int args[])
 {
-  const char *file = (const char *) args[0];
-  // TODO
-  return 0;
+  const char *file_name = (const char *) args[0];
+  lock_acquire (&file_sys_lock);
+  struct file *file = filesys_open (file_name);
+  if (file == NULL) {
+    return -1;
+  }
+  // Add file to struct and create fd
+  struct fd_to_file_mapping *mapping = malloc (sizeof (struct fd_to_file_mapping));
+  mapping->fd = get_new_fd ();
+  mapping->file_struct = file;
+  list_push_back (&thread_current ()->open_fds, &mapping->elem);
+//  thread_current ()->next_free_fd ++;// &thread_current ()->next_free_fd;
+
+  lock_release (&file_sys_lock);
+  return mapping->fd;
 }
 
 /* Returns the size, in bytes, of the file open as fd.*/
@@ -179,24 +230,36 @@ static int
 sys_filesize (int args[])
 {
   int fd = args[0];
-  // TODO
-  return 0;
+  lock_acquire (&file_sys_lock);
+  struct file *fd_file = get_file (fd);
+  int size = file_length (fd_file);
+  lock_release (&file_sys_lock);
+  return size;
 }
 
 /* Reads size bytes from the file open as fd into buffer */
+/* Returns -1 if reading from stdout (fd = 1) */
 static int 
 sys_read (int args[])
 {
   int fd = args[0];
   void *buffer = (void *) args[1];
   unsigned size = (unsigned) args[2];
-  // TODO
-  int read_size = 0;
+  lock_acquire (&file_sys_lock);
+  struct file *fd_file = get_file (fd);
+  if (fd_file == NULL){
+    return -1;
+  }
+  if (fd == 1){
+    return -1;
+  } else if (fd < 0){
+    return -1;
+  }
+  int read_size = file_read (fd_file, buffer, size);
+  lock_release (&file_sys_lock);
   return read_size;
 }
 
-/* Writes size bytes from buffer to the open file fd. Returns the number of bytes actually
-   written, which may be less than size if some bytes could not be written */
 static int 
 sys_write (int args[])
 {
@@ -214,12 +277,6 @@ sys_write (int args[])
     putbuf (buffer, size - written_size);
     written_size = size;
   }
-  // TODO
-  /*
-  else {
-        file_write (struct file *file, const void *buffer, off_t size)
-	written_size = file_write (file, (const void *) args[1], (unsigned) args[2]);
-  } */
 
   return written_size;
 }
@@ -247,9 +304,23 @@ sys_tell (int args[])
 /* Closes file descriptor fd.*/
 static int 
 sys_close (int args[]){
-  // TODO
   int fd = args[0];
+  struct fd_to_file_mapping *map = get_map (fd);
+  if (map != NULL)
+    {
+      file_close (map->file_struct);
+      list_remove (&map->elem);
+      free (map);
+    }
   return 0;
+}
+
+void validate_pointer (const void *vaddr, int args[])
+{
+  if (vaddr < PHYS_BASE) 
+  {
+    sys_halt(args); // to change to sys_exit (currently unfinished)
+  }
 }
 
 static void
@@ -271,10 +342,9 @@ syscall_handler (struct intr_frame *f)
   /* checks that esp is an enum */
   int syscall_no = * (int *) f->esp;
   if (syscall_no < SYS_INUMBER)
-    {
-      //int args[sys_functions[syscall_no].num_of_args] = f->esp + 1;
-      int *args = f->esp + 4;
-      //get_stack_args(f, args, sys_functions[syscall_no].num_of_args);
-      f->eax = (sys_functions[syscall_no].sys_call)(args); 
-    }
+  {
+      int args[sys_functions[syscall_no].num_of_args];
+      get_stack_args(f, args, sys_functions[syscall_no].num_of_args);
+      f->eax = (sys_functions[syscall_no].sys_call)(args);
+  }
 }
