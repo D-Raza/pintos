@@ -288,6 +288,17 @@ sys_close (int args[]){
   return 0;
 }
 
+<<<<<<< Updated upstream
+=======
+void validate_pointer (const void *vaddr, int args[])
+{
+  if (vaddr < PHYS_BASE) 
+  {
+    sys_halt(args); // to change to sys_exit (currently unfinished)
+  }
+}
+
+>>>>>>> Stashed changes
 static void
 syscall_handler (struct intr_frame *f)
 {
