@@ -14,6 +14,7 @@
 #include "filesys/filesys.h"
 #include <list.h>
 #include <string.h>
+#include <stdlib.h>
 
 #define MAX_ARGS 3
 
@@ -92,17 +93,6 @@ get_stack_args (struct intr_frame *f,  int *args, int num_of_args)
     // have some sort of error for invalid pointers
   }
 }	
-
-static int *get_fd (int *fd)
-{
-  struct list_elem *e;
-  for (e = list_begin (&thread_current ()->open_fds); e != list_end (&thread_current ()->open_fds); e = list_next (e)) {
-    if ((int *) e == fd){
-      return fd;
-    }
-  }
-  return NULL;
-}
 
 static int get_new_fd ()
 {
@@ -203,37 +193,68 @@ sys_open (int args[])
     return -1;
   }
   // Add file to struct and create fd
-  struct fd_to_file_mapping mapping = {get_new_fd (), file, &thread_current ()->elem};
-  list_push_back (&thread_current ()->open_fds, &mapping.elem);
+ 
+ struct fd_to_file_mapping *mapping = malloc (sizeof (struct fd_to_file_mapping));
+ mapping->fd = get_new_fd ();
+ mapping->file_struct = file;
+ list_push_back (&thread_current ()->open_fds, &mapping->elem);
 //  thread_current ()->next_free_fd ++;// &thread_current ()->next_free_fd;
 
   lock_release (&file_sys_lock);
-  return mapping.fd;
+  return mapping->fd;
 }
 
+static struct file*
+get_file (int *fd)
+{
+  struct list *fds = &thread_current ()->open_fds;
+  if (list_empty (fds))
+    return NULL;
+  struct list_elem *e;
+  for (e = list_begin (fds); e != list_end (fds); e = list_next (e)) {
+    struct fd_to_file_mapping *map = list_entry (e, struct fd_to_file_mapping, elem);
+    if (map->fd == fd){
+      return map->file_struct;
+    }
+  }
+  return NULL;
+}
+  
 /* Returns the size, in bytes, of the file open as fd.*/
 static int 
 sys_filesize (int args[])
 {
   int fd = args[0];
-  // TODO
-  return 0;
+  lock_acquire (&file_sys_lock);
+  struct file *fd_file = get_file (fd);
+  int size = file_length (fd_file);
+  lock_release (&file_sys_lock);
+  return size;
 }
 
 /* Reads size bytes from the file open as fd into buffer */
+/* Returns -1 if reading from stdout (fd = 1) */
 static int 
 sys_read (int args[])
 {
   int fd = args[0];
   void *buffer = (void *) args[1];
   unsigned size = (unsigned) args[2];
-  // TODO
-  int read_size = 0;
+  lock_acquire (&file_sys_lock);
+  struct file *fd_file = get_file (fd);
+  if (fd_file == NULL){
+    return -1;
+  }
+  if (fd == 1){
+    return -1;
+  } else if (fd < 0){
+    return -1;
+  }
+  int read_size = file_read (fd_file, buffer, size);
+  lock_release (&file_sys_lock);
   return read_size;
 }
 
-/* Writes size bytes from buffer to the open file fd. Returns the number of bytes actually
-   written, which may be less than size if some bytes could not be written */
 static int 
 sys_write (int args[])
 {
@@ -251,12 +272,6 @@ sys_write (int args[])
     putbuf (buffer, size - written_size);
     written_size = size;
   }
-  // TODO
-  /*
-  else {
-        file_write (struct file *file, const void *buffer, off_t size)
-	written_size = file_write (file, (const void *) args[1], (unsigned) args[2]);
-  } */
 
   return written_size;
 }
@@ -321,15 +336,4 @@ syscall_handler (struct intr_frame *f)
       get_stack_args(f, args, sys_functions[syscall_no].num_of_args);
       f->eax = (sys_functions[syscall_no].sys_call)(args);
   }
-}
-
-/* checks if the given file name is null, empty or more than 14 characters */
-static bool
-is_valid_file_name (char *file_name) 
-{
-  if (!file_name || strcmp(file_name, "") == 0 || strlen(file_name) > 14) {
-    return false;
-  }
-
-  return true;
 }
