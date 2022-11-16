@@ -15,8 +15,10 @@
 #include <list.h>
 #include <string.h>
 #include <stdlib.h>
+#include "threads/malloc.h"
 
 #define MAX_ARGS 3
+#define MAX_CONSOLE_WRITE_SIZE 300
 
 static void syscall_handler (struct intr_frame *);
 
@@ -246,14 +248,13 @@ static int
 sys_read (int args[])
 {
   int fd = args[0];
-  void *buffer = (void *) args[1];
+  const void *buffer = (void *) args[1];
   unsigned size = (unsigned) args[2];
   lock_acquire (&file_sys_lock);
   struct file *fd_file = get_file (fd);
   if (fd_file == NULL){
     return -1;
-  }
-  if (fd == 1){
+  } else if (fd == 1){
     return -1;
   } else if (fd < 0){
     return -1;
@@ -269,19 +270,26 @@ sys_write (int args[])
   int fd = (int) args[0];
   const void *buffer = (const void *) args[1];
   unsigned size = (unsigned) args[2];
-
-  int written_size = 0;
-  if (fd == STDOUT_FILENO){
-    while (size > 300){
-      putbuf (buffer, 300);
-      buffer += 300;
-      written_size += 300;
-    }
-    putbuf (buffer, size - written_size);
-    written_size = size;
+  struct file *fd_file = get_file (fd);
+  if (fd == 0){
+    return -1;
   }
-
-  return written_size;
+  lock_acquire (&file_sys_lock);
+  int write_size = 0;
+  if (fd == 1){
+    while (size > MAX_CONSOLE_WRITE_SIZE){
+      putbuf (buffer, MAX_CONSOLE_WRITE_SIZE);
+      write_size += MAX_CONSOLE_WRITE_SIZE;
+    }
+    putbuf (buffer, size - write_size);
+    write_size = size;
+    lock_release (&file_sys_lock);
+    return write_size;
+  } else {
+    write_size = file_write (fd_file, buffer, size);
+    lock_release (&file_sys_lock);
+    return write_size;
+  }
 }
 
 /* Changes the next byte to be read or written in open file fd to position, expressed in bytes
