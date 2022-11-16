@@ -662,14 +662,8 @@ push_all_to_stack (char **argv, int argc, struct intr_frame *if_)
       count--;
     }
 
-    /* Push a null pointer sentinel (0) until the address is word-aligned */
-    while (((int) *esp) % WORD_SIZE != 0) {
-      push_to_stack(0, esp, false);
-    }
-
-    /* Stores stack address of the pointer in argv */
-    /* CHECK THIS */
-    void *first_ptr = *esp - (argc * WORD_SIZE);
+    /* Move esp so that the address is word-aligned */ 
+    *esp -= (unsigned int) *esp % WORD_SIZE;
 
     /* Push sentinel entry */
     push_to_stack(0x00000000, esp, false);
