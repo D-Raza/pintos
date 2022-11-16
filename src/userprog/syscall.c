@@ -94,8 +94,8 @@ get_stack_args (struct intr_frame *f,  int *args, int num_of_args)
   }
 }	
 
-static struct file*
-get_file (int *fd)
+static struct fd_to_file_mapping*
+get_map (int fd)
 {
   struct list *fds = &thread_current ()->open_fds;
   if (list_empty (fds))
@@ -104,9 +104,18 @@ get_file (int *fd)
   for (e = list_begin (fds); e != list_end (fds); e = list_next (e)) {
     struct fd_to_file_mapping *map = list_entry (e, struct fd_to_file_mapping, elem);
     if (map->fd == fd){
-      return map->file_struct;
+      return map;
     }
   }
+  return NULL;
+}
+
+static struct file*
+get_file (int fd)
+{
+  struct fd_to_file_mapping *map = get_map (fd);
+  if (map != NULL)
+    return map->file_struct;
   return NULL;
 }
 
