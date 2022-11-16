@@ -682,8 +682,7 @@ push_all_to_stack (char **argv, int argc, struct intr_frame *if_)
     push_to_stack(argc, esp, false);
 
     /* Push fake return address */
-    unsigned int fake_adr = 0xD0C0FFEE;
-    * (unsigned int *) *esp = fake_adr;
+    push_to_stack((void *) 0xD0C0FFEE, esp, false);
   }
 
 
