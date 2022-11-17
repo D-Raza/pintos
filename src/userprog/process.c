@@ -8,6 +8,7 @@
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
 #include "userprog/tss.h"
+#include "userprog/syscall.h"
 #include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
@@ -195,7 +196,7 @@ process_exit (void)
     struct wait_handler *child_process = list_entry (list_pop_front (&cur->child_processes), struct wait_handler, elem);
     if (test_set(&child_process->destroy))
       {
-	free (child_process);
+	      free (child_process);
       }
   }
   /* Destroy the current process's page directory and switch back
@@ -204,6 +205,27 @@ process_exit (void)
   if (pd != NULL) 
     {
       printf("%s: exit(%d)\n", cur->name, cur->wait_handler->exit_status);
+
+      sema_up (&cur->wait_handler->wait_sema);
+
+      if (test_set(&cur->wait_handler->destroy))
+        {
+          free(cur->wait_handler);
+          cur->wait_handler = NULL;
+        }
+
+
+      /* Iterate through all open files and close them. */
+      while (!list_empty (&cur->open_fds)) 
+        {
+          struct fd_to_file_mapping *map = list_entry (list_pop_front (&cur->open_fds), struct fd_to_file_mapping, elem);
+          if (map->file_struct != NULL)
+            {
+              file_close (map->file_struct);
+            }
+          list_remove (&map->elem);
+          free (map);
+        }
 
       /* Correct ordering here is crucial.  We must set
          cur->pagedir to NULL before switching page directories,
@@ -216,14 +238,6 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
-  sema_up (&cur->wait_handler->wait_sema);
-
-  if (test_set(&cur->wait_handler->destroy))
-    {
-      free(cur->wait_handler);
-      cur->wait_handler = NULL;
-    }
-
 }
 
 /* Sets up the CPU for running user code in the current
