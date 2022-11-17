@@ -17,16 +17,11 @@
 #include <stdlib.h>
 #include <debug.h>
 
-#define MAX_ARGS 3
-
 static void syscall_handler (struct intr_frame *);
 static void validate_pointer (const void *vaddr, int *args);
 static bool validate_string (const char *str);
 static int get_user (const uint8_t *uaddr);
 static bool put_user (uint8_t *udst, uint8_t byte);
-
-
-
 bool FILESYS_LOCK_ACQUIRE = false;
 
 void
@@ -113,6 +108,10 @@ static bool
 mem_try_read_buffer (const void *buffer, unsigned size)
   {
     const uint8_t *buff = buffer;
+    if (!size) 
+      {
+        return true;
+      }
     if (!is_user_vaddr (buff + size))
       {
         return false;
@@ -120,7 +119,7 @@ mem_try_read_buffer (const void *buffer, unsigned size)
     for (uint8_t *p = (uint8_t *) ((uintptr_t)buff / PGSIZE * PGSIZE);
          p <= buff; p += PGSIZE)
       {
-        if (get_user (p) == -1)
+        if (get_user ((void *) p) == -1)
           {
             return false;
           }
@@ -135,6 +134,10 @@ mem_try_write_buffer (const void *buffer, unsigned size)
     if (!is_user_vaddr (buff + size))
       {
         return false;
+      }
+    if (!size) 
+      {
+        return true;
       }
     for (uint8_t *p = (uint8_t *)(((uintptr_t)buff / PGSIZE) * PGSIZE);
          p <= buff; p += PGSIZE)
@@ -319,8 +322,8 @@ static int
 sys_filesize (int args[])
 {
   int fd = args[0];
-  lock_acquire (&file_sys_lock);
   struct file *fd_file = get_file (fd);
+  lock_acquire (&file_sys_lock);
   int size = file_length (fd_file);
   lock_release (&file_sys_lock);
   return size;
@@ -345,6 +348,7 @@ sys_read (int args[])
   }
   if (!mem_try_write_buffer (buffer, size))
     {
+
       thread_exit ();
     }
   lock_acquire (&file_sys_lock);
@@ -417,11 +421,11 @@ sys_tell (int args[])
   if (fd == STDIN_FILENO || fd == STDOUT_FILENO){
     return -1;
   }
-  lock_acquire (&file_sys_lock);
   struct file *fd_file = get_file (fd);
   if (!fd_file){
     return -1;
   }
+  lock_acquire (&file_sys_lock);
   int position = file_tell (fd_file);
   lock_release (&file_sys_lock);
   return position;
