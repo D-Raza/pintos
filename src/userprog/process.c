@@ -67,37 +67,35 @@ process_execute (const char *cmd)
     struct process_start_aux *psa = malloc (sizeof (struct process_start_aux));
     psa->filename = cmd_copy;
     psa->wait_handler = wh;
-    tid = thread_create (file_name, PRI_DEFAULT, start_child_process, psa);
-    wh->tid = tid;
+    tid = thread_create (file_name, PRI_DEFAULT, start_process, psa);
 
-    if (tid == TID_ERROR)
+    if (tid != TID_ERROR)
       {
-        list_remove (&wh->elem);
-	free (wh);
-	palloc_free_page (cmd_copy);
-	return TID_ERROR;
+        free (cmd_copy_2);
+        sema_down (&wh->wait_sema);
+        if (wh->tid == TID_ERROR)
+          {
+            list_remove (&wh->elem);
+            if (test_set (&wh->destroy))
+              {
+                free (wh);
+              }
+            tid = TID_ERROR;
+          }
       }
-
-    
+      
+    // palloc_free_page (cmd_copy);
   } 
   return tid;
-}
-
-static void
-start_child_process (void *psa_aux)
-{
-  struct process_start_aux psa = * (struct process_start_aux *)psa_aux;
-  free (psa_aux);
-  thread_current()-> wait_handler = psa.wait_handler;
-  start_process (psa.filename); 
 }
 
 /* A thread function that loads a user process and starts it
    running. */
 static void
-start_process (void* file_name_)
+start_process (void *psa_)
 {
-  char *file_name = file_name_;
+  struct process_start_aux *psa = psa_;
+  char *file_name = (char *) psa->filename;
   struct intr_frame if_;
   bool success;
 
@@ -122,6 +120,8 @@ start_process (void* file_name_)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (tokens[0], &if_.eip, &if_.esp);
 
+  thread_current ()->wait_handler = psa->wait_handler;
+
   /* If file loaded successfully, set up stack */
   if (success)  
     {
@@ -131,13 +131,30 @@ start_process (void* file_name_)
       /* Push number of args: argc */
       /* Push a fake return address (0) */
       /* All handled by push_all_to_stack */
+    
+      // set psa wait tid to current thread tid
+      psa->wait_handler->tid = thread_current ()->wait_handler->tid;
+      // sema_up (&thread_current ()->wait_handler->wait_sema);
       push_all_to_stack (tokens, argc, &if_);
     }
+  
+  // up the wait_sema in the psa
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
   if (!success) 
-    thread_exit ();
+    {
+      sema_up(&thread_current ()->wait_handler->wait_sema);
+      if (thread_current ()->pagedir == NULL)
+        {
+          if (test_set (&thread_current ()->wait_handler->destroy))
+            free (thread_current ()->wait_handler);
+        }
+      thread_exit ();
+    }
+  
+  free (psa);
+
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -171,8 +188,8 @@ process_wait (tid_t child_tid)
       if (child_process->tid == child_tid)
         {
           sema_down (&child_process->wait_sema);
-	  int exit_status = child_process->exit_status;
-	  list_remove(&child_process->elem);
+	        int exit_status = child_process->exit_status;
+	        list_remove(&child_process->elem);
           if (test_set(&child_process->destroy))
             {
               free (child_process);
