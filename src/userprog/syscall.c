@@ -297,7 +297,9 @@ sys_seek (int args[]) {
   int fd = args[0];
   unsigned position = (unsigned) args[1];
   struct file *fd_file = get_file(fd);
+  lock_acquire (&file_sys_lock);
   file_seek (fd_file, position);
+  lock_release (&file_sys_lock);
   return 0;
 }
 
@@ -306,9 +308,11 @@ static int
 sys_tell (int args[])
 {
   int fd = args[0];
-  
-  // TODO
-  return 0;
+  struct file *fd_file = get_file(fd);
+  lock_acquire (&file_sys_lock);
+  int position = file_tell (fd_file);
+  lock_release (&file_sys_lock);
+  return position;
 }
 
 /* Closes file descriptor fd.*/
