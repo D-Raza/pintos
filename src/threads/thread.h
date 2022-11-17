@@ -116,6 +116,7 @@ struct thread
     struct wait_handler *wait_handler;  /* Handles the wait/exit status of the child  */
     struct list open_fds;		/* List of files opened by the thread */
     int next_free_fd;			/* Next available fd */
+    struct file *exe;                   /* Loaded Executable */
 #endif
 
     /* Owned by thread.c. */
