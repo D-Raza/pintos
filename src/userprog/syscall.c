@@ -15,10 +15,17 @@
 #include <list.h>
 #include <string.h>
 #include <stdlib.h>
+#include <debug.h>
 
 #define MAX_ARGS 3
 
 static void syscall_handler (struct intr_frame *);
+static void validate_pointer (const void *vaddr, int *args);
+static bool validate_string (const char *str);
+static int get_user (const uint8_t *uaddr);
+static bool put_user (uint8_t *udst, uint8_t byte);
+
+
 
 bool FILESYS_LOCK_ACQUIRE = false;
 
@@ -27,6 +34,24 @@ syscall_init (void)
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
+
+static bool
+validate_string (const char *str)
+  {
+    if (get_user((void *) str) == -1 || !is_user_vaddr (str))
+      {
+        return false;
+      }
+    while (*str != '\0')
+      {
+        if (get_user((void *) str) == -1 || !is_user_vaddr (str))
+          {
+            return false;
+          }
+        str++;
+      }
+    return true;
+  }
 
 /* Reads a byte at user virtual address UADDR.
    UADDR must be below PHYS_BASE.
@@ -82,6 +107,45 @@ mem_try_write (uint8_t *udst, uint8_t byte)
     return false;
   }
 }
+
+/* Checks if a buffer can be safely read */
+static bool
+mem_try_read_buffer (const void *buffer, unsigned size)
+  {
+    const uint8_t *buff = buffer;
+    if (!is_user_vaddr (buff + size))
+      {
+        return false;
+      } 
+    for (uint8_t *p = (uint8_t *) ((uintptr_t)buff / PGSIZE * PGSIZE);
+         p <= buff; p += PGSIZE)
+      {
+        if (get_user (p) == -1)
+          {
+            return false;
+          }
+      }
+    return true;
+  }
+
+static bool 
+mem_try_write_buffer (const void *buffer, unsigned size)
+  {
+    const uint8_t *buff = buffer;
+    if (!is_user_vaddr (buff + size))
+      {
+        return false;
+      }
+    for (uint8_t *p = (uint8_t *)(((uintptr_t)buff / PGSIZE) * PGSIZE);
+         p <= buff; p += PGSIZE)
+      {
+        if (!put_user (p, get_user (p)))
+          {
+            return false;
+          }
+      }
+    return true;
+  }
 
 /* gets arguments from the stack and stores them in the array args */
 static void
@@ -153,8 +217,14 @@ static pid_t
 sys_exec (int args[])
 {
   const char *cmd_line = (const char *) args[0];
-  return process_execute (cmd_line);
-
+  if (!validate_string (cmd_line))
+    {
+      thread_exit ();
+    }
+  else 
+    {
+      return process_execute (cmd_line);
+    }
 }
 
 /* Waits for a child process pid and retrieves the child’s exit status.
@@ -181,6 +251,17 @@ sys_create (int args[])
 {
   const char *file_name = (const char *) args[0];
   unsigned initial_size = (unsigned) args[1];
+
+  if (!validate_string (file_name))
+    {
+      thread_exit ();
+    }
+
+  if (*file_name == NULL)
+    {
+      return false;
+    }
+
   /* Create new file struct containing file, which adds file to directory */
   lock_acquire (&file_sys_lock);
   bool created = filesys_create (file_name, initial_size);
@@ -196,6 +277,10 @@ static int
 sys_remove (int args[])
 {
   const char *file_name = (const char *) args[0];
+  if (!validate_string (file_name))
+    {
+      thread_exit ();
+    }
   lock_acquire (&file_sys_lock);
   bool removed = filesys_remove (file_name);
   lock_release (&file_sys_lock);
@@ -209,6 +294,10 @@ static int
 sys_open (int args[])
 {
   const char *file_name = (const char *) args[0];
+  if (!validate_string (file_name))
+    {
+      thread_exit ();
+    }
   lock_acquire (&file_sys_lock);
   struct file *file = filesys_open (file_name);
   if (file == NULL) {
@@ -245,16 +334,20 @@ sys_read (int args[])
   int fd = args[0];
   void *buffer = (void *) args[1];
   unsigned size = (unsigned) args[2];
-  lock_acquire (&file_sys_lock);
+
+  if (fd == STDOUT_FILENO)
+    {
+      return -1;
+    }
   struct file *fd_file = get_file (fd);
-  if (fd_file == NULL){
+  if (!fd_file){
     return -1;
   }
-  if (fd == 1){
-    return -1;
-  } else if (fd < 0){
-    return -1;
-  }
+  if (!mem_try_write_buffer (buffer, size))
+    {
+      thread_exit ();
+    }
+  lock_acquire (&file_sys_lock);
   int read_size = file_read (fd_file, buffer, size);
   lock_release (&file_sys_lock);
   return read_size;
@@ -266,9 +359,13 @@ sys_write (int args[])
   int fd = (int) args[0];
   const void *buffer = (const void *) args[1];
   unsigned size = (unsigned) args[2];
-
   int written_size = 0;
-  if (fd == STDOUT_FILENO){
+
+  if (fd == STDIN_FILENO)
+    {
+      return -1;
+    }
+  else if (fd == STDOUT_FILENO){
     /*while (size > 300){
       putbuf (buffer, 300);
       buffer += 300;
@@ -276,9 +373,22 @@ sys_write (int args[])
     }*/
     putbuf (buffer, size - written_size);
     written_size = size;
+    return written_size;
   }
-
-  return written_size;
+  else {
+    struct file *fd_file = get_file (fd);
+    if (!fd_file){
+      return -1;
+    }
+    if (!mem_try_read_buffer (buffer, size))
+      {
+        thread_exit ();
+      }
+    lock_acquire (&file_sys_lock);
+    written_size = file_write (fd_file, buffer, size);
+    lock_release (&file_sys_lock);
+    return written_size;
+  }
 }
 
 /* Changes the next byte to be read or written in open file fd to position, expressed in bytes
@@ -287,8 +397,16 @@ static int
 sys_seek (int args[]) {
   int fd = args[0];
   unsigned position = (unsigned) args[1];
-  // TODO
-  return 0;
+  if (fd == STDIN_FILENO || fd == STDOUT_FILENO){
+    return -1;
+  }
+  lock_acquire (&file_sys_lock);
+  struct file *fd_file = get_file (fd);
+  if (!fd_file){
+    return -1;
+  }
+  file_seek (fd_file, position);
+  lock_release (&file_sys_lock);
 }
 
 /* Returns the position of the next byte to be read or written in open file fd */
@@ -296,15 +414,26 @@ static int
 sys_tell (int args[])
 {
   int fd = args[0];
-  
-  // TODO
-  return 0;
+  if (fd == STDIN_FILENO || fd == STDOUT_FILENO){
+    return -1;
+  }
+  lock_acquire (&file_sys_lock);
+  struct file *fd_file = get_file (fd);
+  if (!fd_file){
+    return -1;
+  }
+  int position = file_tell (fd_file);
+  lock_release (&file_sys_lock);
+  return position;
 }
 
 /* Closes file descriptor fd.*/
 static int 
 sys_close (int args[]){
   int fd = args[0];
+  if (fd == STDIN_FILENO || fd == STDOUT_FILENO){
+    return -1;
+  }
   struct fd_to_file_mapping *map = get_map (fd);
   if (map != NULL)
     {
@@ -340,11 +469,19 @@ syscall_handler (struct intr_frame *f)
   sys_open, sys_filesize, sys_read, sys_write, sys_tell */
 
   /* checks that esp is an enum */
+  if (!mem_try_read_buffer (f->esp, sizeof (int)))
+  {
+    thread_exit ();
+  }
   int syscall_no = * (int *) f->esp;
-  if (syscall_no < SYS_INUMBER)
+  if (syscall_no >= 0 && syscall_no < SYS_INUMBER)
   {
       int args[sys_functions[syscall_no].num_of_args];
       get_stack_args(f, args, sys_functions[syscall_no].num_of_args);
       f->eax = (sys_functions[syscall_no].sys_call)(args);
   }
+  else 
+    {
+      thread_exit ();
+    }
 }
