@@ -72,7 +72,7 @@ process_execute (const char *cmd)
     if (tid != TID_ERROR)
       {
         free (cmd_copy_2);
-        sema_down (&wh->wait_sema);
+        sema_down (&psa->wait_handler->wait_sema);
         if (wh->tid == TID_ERROR)
           {
             list_remove (&wh->elem);
@@ -133,12 +133,12 @@ start_process (void *psa_)
       /* All handled by push_all_to_stack */
     
       // set psa wait tid to current thread tid
-      psa->wait_handler->tid = thread_current ()->wait_handler->tid;
+      psa->wait_handler->tid = thread_current ()->tid;
       // sema_up (&thread_current ()->wait_handler->wait_sema);
       push_all_to_stack (tokens, argc, &if_);
     }
   
-  // up the wait_sema in the psa
+  sema_up (&psa->wait_handler->wait_sema);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -223,14 +223,6 @@ process_exit (void)
     {
       printf("%s: exit(%d)\n", cur->name, cur->wait_handler->exit_status);
 
-      sema_up (&cur->wait_handler->wait_sema);
-
-      if (test_set(&cur->wait_handler->destroy))
-        {
-          free(cur->wait_handler);
-          cur->wait_handler = NULL;
-        }
-
 
       /* Iterate through all open files and close them. */
       while (!list_empty (&cur->open_fds)) 
@@ -244,6 +236,15 @@ process_exit (void)
           free (map);
         }
       file_close (cur -> exe);
+
+      sema_up (&cur->wait_handler->wait_sema);
+
+      if (test_set(&cur->wait_handler->destroy))
+        {
+          free(cur->wait_handler);
+          cur->wait_handler = NULL;
+        }
+
       /* Correct ordering here is crucial.  We must set
          cur->pagedir to NULL before switching page directories,
          so that a timer interrupt can't switch back to the
@@ -363,7 +364,9 @@ load (const char *file_name, void (**eip) (void), void **esp)
   process_activate ();
 
   /* Open executable file. */
+  lock_acquire (&filesys_lock);
   file = filesys_open (file_name);
+  lock_release (&filesys_lock);
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);
