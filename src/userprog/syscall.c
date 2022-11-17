@@ -296,7 +296,8 @@ static int
 sys_seek (int args[]) {
   int fd = args[0];
   unsigned position = (unsigned) args[1];
-  // TODO
+  struct file *fd_file = get_file(fd);
+  file_seek (fd_file, position);
   return 0;
 }
 
