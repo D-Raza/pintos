@@ -172,6 +172,8 @@ get_map (int fd)
     struct fd_to_file_mapping *map = list_entry (e, struct fd_to_file_mapping, elem);
     if (map->fd == fd){
       return map;
+    } else if (map->fd > fd){
+      return NULL; /* as the list is ordered */
     }
   }
   return NULL;
