@@ -28,6 +28,7 @@ static bool test_set (bool *b);
 static void tokenize_args (char *file_name, char **argv);
 static int get_argc (char *file_name);
 static void push_all_to_stack (char **argv, int argc, struct intr_frame *if_);
+static int calc_total_size(char **argv, int argc);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -53,9 +54,13 @@ process_execute (const char *cmd)
     cmd_copy = palloc_get_page (0);
     if (cmd_copy == NULL)
       return TID_ERROR;
+    if (strlen(cmd) > 4000)
+      printf("\nCMD STRING TOO BIG: %s\n", strlen(cmd));
+
     strlcpy (cmd_copy, cmd, PGSIZE);
     
     char *cmd_copy_2 = malloc(strlen(cmd) + 1);
+    printf("\nCOMMAND COPY 2: %s\n", cmd_copy_2);
     strlcpy (cmd_copy_2, cmd, strlen(cmd) + 1);
     char *file_name = strtok_r (cmd_copy_2, " ", &save_ptr);
 
@@ -101,19 +106,20 @@ start_process (void* file_name_)
   struct intr_frame if_;
   bool success;
 
+  int argc = get_argc (file_name);
+
+  /* Tokenize file_name into an array of strings - make some helper function of sort - 
+  tokens contains the arguements as its elements*/
+  char *tokens[argc];
+  tokenize_args (file_name, tokens);
+
   /* Check if number of args is a suitable amount (less than some macro) */
   /* If not, then free, and kill */
-  int argc = get_argc (file_name);
-  if (argc >= MAX_ARG_LIMIT) 
+  if (calc_total_size(tokens, argc) >= 4000) 
     {
       palloc_free_page (file_name);
       thread_exit ();
     }
-
-  /* Tokenize file_name into an array of strings - make some helper function of sort - 
-     tokens contains the arguements as its elements*/
-  char *tokens[argc];
-  tokenize_args (file_name, tokens);
   
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -608,6 +614,7 @@ static void
 tokenize_args(char *file_name, char **argv) 
   {
     /* Use strlcpy to prevent mutation of original *file_name */
+    printf("LENGTH LENGTH LENGTH %d", strlen(file_name) + 1);
     char *file_name_copy = malloc(strlen(file_name) + 1);
     strlcpy (file_name_copy, file_name, strlen(file_name) + 1);
 
@@ -712,3 +719,35 @@ test_set (bool *b)
   return __sync_lock_test_and_set (b, true);
 }
 
+static int
+calc_total_size(char **argv, int argc) {
+  int total_size = 0;
+
+  /* do we need to calculate the memory used for word alignment? */
+
+  /* sum up the sizes of the arguments */
+  int count = argc - 1;
+  while (count >= 0) {
+    total_size += strlen(argv[count]);
+    count--;
+  }
+
+  /* sum up the size of the sentinel entry */
+  total_size += sizeof(0x00000000);
+
+  const int ESP_PTR_SIZE = 8;
+
+  /* sum up the size of the pointer to the first pointer in argv */
+  total_size += sizeof(ESP_PTR_SIZE);
+
+  /* sum up the size of the pointers to the arguments */
+  total_size += (argc * (ESP_PTR_SIZE));
+
+  /* sum up the size of the number of arguments */
+  total_size += sizeof(argc);
+
+  /* sum up the size of the fake return address */
+  total_size += sizeof(0xD0C0FFEE);
+
+  return total_size;
+}
