@@ -283,13 +283,11 @@ sys_write (int args[])
     }
     putbuf (buffer, size - write_size);
     write_size = size;
-    lock_release (&file_sys_lock);
-    return write_size;
   } else {
     write_size = file_write (fd_file, buffer, size);
-    lock_release (&file_sys_lock);
-    return write_size;
   }
+  lock_release (&file_sys_lock);
+  return write_size;
 }
 
 /* Changes the next byte to be read or written in open file fd to position, expressed in bytes
