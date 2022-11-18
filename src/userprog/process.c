@@ -74,30 +74,20 @@ process_execute (const char *cmd)
     tid = thread_create (file_name, PRI_DEFAULT, start_child_process, psa);
     wh->tid = tid;
 
-    //printf ("tid is %d\n", tid);
-    //printf ("TID_ERROR is %d\n", TID_ERROR);
-
     if (tid == TID_ERROR)
       {
-	//printf ("Enters TID is error\n");
         list_remove (&wh->elem);
 	free (wh);
 	palloc_free_page (cmd_copy);
 	return TID_ERROR;
       }
-
-    
   }
-  //printf ("LEAVES WAIT HANDLER \n");
-  //printf ("THREAD ID is %d\n", tid);
-
   return tid;
 }
 
 static void
 start_child_process (void *psa_aux)
 {
-//  printf ("STARTS CHILD PROCESS\n");
   struct process_start_aux psa = * (struct process_start_aux *)psa_aux;
   free (psa_aux);
   thread_current()-> wait_handler = psa.wait_handler;
@@ -109,32 +99,25 @@ start_child_process (void *psa_aux)
 static void
 start_process (void* file_name_)
 {
-  //printf ("Starts process\n");
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
 
-  //printf ("START GETTING ARGC\n");
   int argc = get_argc (file_name);
-  //printf ("END GETTING ARGC\n");
 
   /* Tokenize file_name into an array of strings - make some helper function of sort - 
   tokens contains the arguements as its elements*/
   char *tokens[argc];
-  //printf ("TOKENSIZE ARGS START\n");
   tokenize_args (file_name, tokens);
-  //printf ("END TOKENIZE ARGS\n");
 
   /* Check if number of args is a suitable amount (less than some macro) */
   /* If not, then free, and kill */
-  if (calc_total_size(tokens, argc) >= MAX_CMDS_SIZE) 
+  if (calc_total_size(tokens, argc) > MAX_CMDS_SIZE) 
     {
-      //printf("NUMBER OF ARGS IS SUITABLEi\n");
       palloc_free_page (file_name);
       thread_exit ();
     }
   
-  //printf("NUMBER OF ARGS IS SUITABLE\n");
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
@@ -145,7 +128,6 @@ start_process (void* file_name_)
   /* If file loaded successfully, set up stack */
   if (success)  
     {
-      //printf ("LOAD IS SUCCESSFUL"); // gets here
       /* Push args on stack in reverse order */
       /* Push argv[argc] = NULL (a null pointer) */  
       /* In reverse order, push pointers to args on stack */
@@ -156,12 +138,10 @@ start_process (void* file_name_)
     }
 
   /* If load failed, quit. */
-  //printf ("REACHES PALLOC_FREE_PAGE \n");
   palloc_free_page (file_name);
-  //printf ("FINISHES PALLOC_FREE_PAGE \n");
-  if (!success) 
-    printf ("LOAD FAILED\n");
+  if (!success) {
     thread_exit ();
+  }
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -170,7 +150,6 @@ start_process (void* file_name_)
      we just point the stack pointer (%esp) to our stack frame
      and jump to it. */
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
-  //printf("REACHES ASM VOLATILE\n");
   NOT_REACHED ();
 }
 
@@ -633,11 +612,8 @@ static void
 tokenize_args(char *file_name, char **argv) 
   {
     /* Use strlcpy to prevent mutation of original *file_name */
-    printf("LENGTH LENGTH LENGTH %d", strlen(file_name) + 1);
     char *file_name_copy = malloc(strlen(file_name) + 1);
-    printf("FILE NAME COPY %d\n", &file_name_copy);
     strlcpy (file_name_copy, file_name, strlen(file_name) + 1);
-    printf("COPIED STRING NAME %s\n", file_name_copy);
     char *token, *save_ptr;
     int i = 0;
 
