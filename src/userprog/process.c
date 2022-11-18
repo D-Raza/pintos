@@ -116,10 +116,10 @@ start_process (void *psa_)
   struct intr_frame if_;
   bool success;
 
+  /* Count the number of arguments */
   int argc = get_argc (file_name);
 
-  /* Tokenize file_name into an array of strings - make some helper function of sort - 
-  tokens contains the arguements as its elements*/
+  /* Tokenize file_name into an array of strings */
   char *tokens[argc];
   tokenize_args (file_name, tokens);
 
@@ -128,24 +128,9 @@ start_process (void *psa_)
   if (calc_total_size(tokens, argc) > 1000) 
     {
       palloc_free_page (file_name);
-      /*printf ("FINISH PALLOC\n");
-      struct thread *cur = thread_current ();
-      uint32_t *pd;
-      pd = cur->pagedir;
-      if (pd == NULL){
-	      printf ("PD IS NULL\n");
-      } else {
-	    printf ("PD IS NOT NULL\n");
-      }
-      if (thread_current ()->status == THREAD_RUNNING){
-	      printf ("THIS IS A RUNNING THREAD\n");
-      } else {
-	      printf ("THE STATUS OF THE THREAD IS %s\n", thread_current ()->status);
-      }*/
       thread_exit ();
-      //printf ("FINISHED THREAD_EXIT\n");
     }
-  //printf ("PAST IF \n");
+  
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
@@ -166,6 +151,7 @@ start_process (void *psa_)
       /* Push args on stack in reverse order */
       /* Push argv[argc] = NULL (a null pointer) */  
       /* In reverse order, push pointers to args on stack */
+      /* Push a pointer to the first pointer */
       /* Push number of args: argc */
       /* Push a fake return address (0) */
       /* All handled by push_all_to_stack */
@@ -821,34 +807,37 @@ test_set (bool *b)
   return __sync_lock_test_and_set (b, true);
 }
 
+
+/* Calculates the total size that needs to be allocated in the stack for an argument passing operation */
 static int
 calc_total_size(char **argv, int argc) {
   int total_size = 0;
+  const int MAX_SIZE_FOR_WORD_ALIGNMENT = 3;
+  const int ESP_PTR_SIZE = 8;
 
-  /* do we need to calculate the memory used for word alignment? */
-
-  /* sum up the sizes of the arguments */
+  /* Add the sizes of the arguments */
   int count = argc - 1;
   while (count >= 0) {
     total_size += strlen(argv[count]);
     count--;
   }
 
-  /* sum up the size of the sentinel entry */
+  /* Add the maximum size needed in the stack for word-alignment after pushing the argument names to the stack */
+  total_size += MAX_SIZE_FOR_WORD_ALIGNMENT;
+
+  /* Add the size of the sentinel entry */
   total_size += sizeof(0x00000000);
 
-  const int ESP_PTR_SIZE = 8;
-
-  /* sum up the size of the pointer to the first pointer in argv */
+  /* Add the size of the pointer to the first pointer in argv */
   total_size += sizeof(ESP_PTR_SIZE);
 
-  /* sum up the size of the pointers to the arguments */
+  /* Add the size of the pointers to the arguments */
   total_size += (argc * (ESP_PTR_SIZE));
 
-  /* sum up the size of the number of arguments */
+  /* Add the size of the number of arguments */
   total_size += sizeof(argc);
 
-  /* sum up the size of the fake return address */
+  /* Add the size of the fake return address */
   total_size += sizeof(0xD0C0FFEE);
 
   return total_size;
