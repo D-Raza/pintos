@@ -61,9 +61,18 @@ process_execute (const char *cmd)
 
     ASSERT (file_name != NULL);
     
-    if (strlen (file_name) > 14 || !filesys_open (file_name))
-      return TID_ERROR; 
+    if (strlen (file_name) > 14)
+      {
+        return TID_ERROR;
+      }
 
+    file_sys_lock_acquire ();
+    if (!filesys_open (file_name))
+      {
+        file_sys_lock_release ();
+        return TID_ERROR;
+      }
+    file_sys_lock_release ();
     struct process_start_aux *psa = malloc (sizeof (struct process_start_aux));
     psa->filename = cmd_copy;
     psa->wait_handler = wh;
@@ -187,6 +196,10 @@ process_wait (tid_t child_tid)
       child_process = list_entry (e, struct wait_handler, elem);
       if (child_process->tid == child_tid)
         {
+          if (!child_process)
+            {
+              return -1;
+            }
           sema_down (&child_process->wait_sema);
 	        int exit_status = child_process->exit_status;
 	        list_remove(&child_process->elem);
@@ -216,12 +229,20 @@ process_exit (void)
 	      free (child_process);
       }
   }
+
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
   if (pd != NULL) 
     {
       printf("%s: exit(%d)\n", cur->name, cur->wait_handler->exit_status);
+
+      sema_up (&cur->wait_handler->wait_sema);
+
+      if (test_set(&cur->wait_handler->destroy))
+        {
+          free(cur->wait_handler);
+        }
 
 
       /* Iterate through all open files and close them. */
@@ -237,17 +258,11 @@ process_exit (void)
           list_remove (&map->elem);
           free (map);
         }
+      
       file_sys_lock_acquire ();
       file_close (cur -> exe);
       file_sys_lock_release ();
 
-      sema_up (&cur->wait_handler->wait_sema);
-
-      if (test_set(&cur->wait_handler->destroy))
-        {
-          free(cur->wait_handler);
-          cur->wait_handler = NULL;
-        }
 
       /* Correct ordering here is crucial.  We must set
          cur->pagedir to NULL before switching page directories,
@@ -376,10 +391,11 @@ load (const char *file_name, void (**eip) (void), void **esp)
       printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
+
   file_sys_lock_acquire ();
   file_deny_write (file);
   file_sys_lock_release ();
-  t->exe = file;
+
   
   /* Read and verify executable header. */
   file_sys_lock_acquire ();
@@ -477,10 +493,18 @@ load (const char *file_name, void (**eip) (void), void **esp)
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
 
+  t->exe = file;
+
   success = true;
+
+  return success;
 
  done:
   /* We arrive here whether the load is successful or not. */
+
+  file_sys_lock_acquire ();
+  file_close (file);
+  file_sys_lock_release ();
   return success;
 }
 
