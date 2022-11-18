@@ -20,6 +20,8 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
+#define MAX_CMDS_SIZE 4096
+
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 static bool test_set (bool *b);
@@ -27,6 +29,7 @@ static void tokenize_args (char *file_name, char **argv);
 static int get_argc (char *file_name);
 static void push_to_stack (void *to_push, void **esp, bool is_str_push);
 static void push_all_to_stack (char **argv, int argc, struct intr_frame *if_);
+static int calc_total_size(char **argv, int argc);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -113,19 +116,20 @@ start_process (void *psa_)
   struct intr_frame if_;
   bool success;
 
+  /* Count the number of arguments */
+  int argc = get_argc (file_name);
+
+  /* Tokenize file_name into an array of strings */
+  char *tokens[argc];
+  tokenize_args (file_name, tokens);
+
   /* Check if number of args is a suitable amount (less than some macro) */
   /* If not, then free, and kill */
-  int argc = get_argc (file_name);
-  if (argc >= MAX_ARG_LIMIT) 
+  if (calc_total_size(tokens, argc) > 1000) 
     {
       palloc_free_page (file_name);
       thread_exit ();
     }
-
-  /* Tokenize file_name into an array of strings - make some helper function of sort - 
-     tokens contains the arguements as its elements*/
-  char *tokens[argc];
-  tokenize_args (file_name, tokens);
   
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -147,6 +151,7 @@ start_process (void *psa_)
       /* Push args on stack in reverse order */
       /* Push argv[argc] = NULL (a null pointer) */  
       /* In reverse order, push pointers to args on stack */
+      /* Push a pointer to the first pointer */
       /* Push number of args: argc */
       /* Push a fake return address (0) */
       /* All handled by push_all_to_stack */
@@ -172,7 +177,6 @@ start_process (void *psa_)
     }
   
   free (psa);
-
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -697,7 +701,6 @@ tokenize_args(char *file_name, char **argv)
     /* Use strlcpy to prevent mutation of original *file_name */
     char *file_name_copy = malloc(strlen(file_name) + 1);
     strlcpy (file_name_copy, file_name, strlen(file_name) + 1);
-
     char *token, *save_ptr;
     int i = 0;
 
@@ -802,4 +805,40 @@ static bool
 test_set (bool *b) 
 {
   return __sync_lock_test_and_set (b, true);
+}
+
+
+/* Calculates the total size that needs to be allocated in the stack for an argument passing operation */
+static int
+calc_total_size(char **argv, int argc) {
+  int total_size = 0;
+  const int MAX_SIZE_FOR_WORD_ALIGNMENT = 3;
+  const int ESP_PTR_SIZE = 8;
+
+  /* Add the sizes of the arguments */
+  int count = argc - 1;
+  while (count >= 0) {
+    total_size += strlen(argv[count]);
+    count--;
+  }
+
+  /* Add the maximum size needed in the stack for word-alignment after pushing the argument names to the stack */
+  total_size += MAX_SIZE_FOR_WORD_ALIGNMENT;
+
+  /* Add the size of the sentinel entry */
+  total_size += sizeof(0x00000000);
+
+  /* Add the size of the pointer to the first pointer in argv */
+  total_size += sizeof(ESP_PTR_SIZE);
+
+  /* Add the size of the pointers to the arguments */
+  total_size += (argc * (ESP_PTR_SIZE));
+
+  /* Add the size of the number of arguments */
+  total_size += sizeof(argc);
+
+  /* Add the size of the fake return address */
+  total_size += sizeof(0xD0C0FFEE);
+
+  return total_size;
 }
