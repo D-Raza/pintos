@@ -454,7 +454,8 @@ sys_close (int args[])
 static void
 syscall_handler (struct intr_frame *f)
 {
-  static const system_call sys_functions[SYS_MUNMAP + 1] = {
+  /* Array of function pointers to system calls */
+  static const int (*sys_functions[SYS_MUNMAP + 1]) (int args[]) = {
     [SYS_HALT] = sys_halt,
     [SYS_EXIT] = sys_exit,
     [SYS_EXEC] = sys_exec,
@@ -473,7 +474,6 @@ syscall_handler (struct intr_frame *f)
     [SYS_MMAP] = sys_mmap,
     [SYS_MUNMAP] = sys_munmap
     #endif
-
   };
 
   struct thread* cur = thread_current ();
