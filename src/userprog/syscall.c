@@ -26,7 +26,6 @@ static int get_user (const uint8_t *uaddr);
 static bool put_user (uint8_t *udst, uint8_t byte);
 static bool mem_try_read_buffer (const void *buffer, unsigned size);
 static bool  mem_try_write_buffer (const void *buffer, unsigned size);
-static void get_stack_args (struct intr_frame *f,  int *args, int num_of_args);
 static struct fd_to_file_mapping* get_map (int fd);
 static struct file* get_file (int fd);
 static int get_new_fd (void);
@@ -154,16 +153,6 @@ mem_try_write_buffer (const void *buffer, unsigned size)
   return true;
 }
 
-/* gets arguments from the stack and stores them in the array args */
-static void
-get_stack_args (struct intr_frame *f,  int *args, int num_of_args)
-{
-  for (int i = 0; i < num_of_args; i++){
-    int pointer = * (int *) (f->esp + i*4 + 4);
-    args[i] = pointer;
-  }
-}	
-
 static struct fd_to_file_mapping*
 get_map (int fd)
 {
@@ -173,11 +162,14 @@ get_map (int fd)
   struct list_elem *e;
   for (e = list_begin (fds); e != list_end (fds); e = list_next (e)) {
     struct fd_to_file_mapping *map = list_entry (e, struct fd_to_file_mapping, elem);
-    if (map->fd == fd){
-      return map;
-    } else if (map->fd > fd){
-      return NULL; /* as the list is ordered */
-    }
+    if (map->fd == fd)
+      {
+        return map;
+      } 
+    else if (map->fd > fd)
+      {
+        return NULL; /* as the list is ordered */
+      }
   }
   return NULL;
 }
@@ -187,7 +179,9 @@ get_file (int fd)
 {
   struct fd_to_file_mapping *map = get_map (fd);
   if (map != NULL)
-    return map->file_struct;
+    {
+      return map->file_struct;
+    }
   return NULL;
 }
 
@@ -460,12 +454,27 @@ sys_close (int args[])
 static void
 syscall_handler (struct intr_frame *f)
 {
-  struct syscalls sys_functions[] = {{sys_halt, 0}, {sys_exit, 1}, {sys_exec, 1}, {sys_wait, 1},
-	  {sys_create, 2}, {sys_remove, 1}, {sys_open, 1}, {sys_filesize, 1}, {sys_read, 3},
-	  {sys_write, 3}, {sys_seek, 2}, {sys_tell, 1}, {sys_close, 1}};
+  static const system_call sys_functions[SYS_MUNMAP + 1] = {
+    [SYS_HALT] = sys_halt,
+    [SYS_EXIT] = sys_exit,
+    [SYS_EXEC] = sys_exec,
+    [SYS_WAIT] = sys_wait,
+    [SYS_CREATE] = sys_create,
+    [SYS_REMOVE] = sys_remove,
+    [SYS_OPEN] = sys_open,
+    [SYS_FILESIZE] = sys_filesize,
+    [SYS_READ] = sys_read,
+    [SYS_WRITE] = sys_write,
+    [SYS_SEEK] = sys_seek,
+    [SYS_TELL] = sys_tell,
+    [SYS_CLOSE] = sys_close
 
-  /* funcs returning a value are sys_exec, sys_wait, sys_create, sys_remove,
-  sys_open, sys_filesize, sys_read, sys_write, sys_tell */
+    #ifdef VM
+    [SYS_MMAP] = sys_mmap,
+    [SYS_MUNMAP] = sys_munmap
+    #endif
+
+  };
 
   /* checks that esp is an enum */
   if (!mem_try_read_buffer (f->esp, sizeof (int)))
@@ -473,11 +482,10 @@ syscall_handler (struct intr_frame *f)
       thread_exit ();
     }
   int syscall_no = * (int *) f->esp;
-  if (syscall_no >= 0 && syscall_no < SYS_INUMBER)
+  if (syscall_no >= 0 && syscall_no <= SYS_CLOSE)
     {
-      int args[sys_functions[syscall_no].num_of_args];
-      get_stack_args(f, args, sys_functions[syscall_no].num_of_args);
-      f->eax = (sys_functions[syscall_no].sys_call)(args);
+      int *args = f->esp + 4;
+      f->eax = (sys_functions[syscall_no])(args);
     }
   else 
     {
