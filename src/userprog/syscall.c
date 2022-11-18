@@ -227,7 +227,7 @@ sys_exit (int args[]){
   int status = args[0];
 
   thread_current ()->wait_handler->exit_status = status;
-  process_exit ();
+  thread_exit ();
   return 0;
 }
 
