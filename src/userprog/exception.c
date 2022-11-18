@@ -145,9 +145,12 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
-  f->eip = (void *) f->eax;
-  f->eax = 0xffffffff;
-  return;
+  if (!user) //TODO should be syscall flag
+    {
+      f->eip = (void *) f->eax;
+      f->eax = 0xffffffff;
+      return;
+    }
 
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
@@ -157,5 +160,6 @@ page_fault (struct intr_frame *f)
           not_present ? "not present" : "rights violation",
           write ? "writing" : "reading",
           user ? "user" : "kernel");
+  thread_exit ();
 }
 

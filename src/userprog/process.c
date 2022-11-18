@@ -62,44 +62,60 @@ process_execute (const char *cmd)
     char *cmd_copy_2 = malloc(strlen(cmd) + 1);
     strlcpy (cmd_copy_2, cmd, strlen(cmd) + 1);
     char *file_name = strtok_r (cmd_copy_2, " ", &save_ptr);
-
+    
     ASSERT (file_name != NULL);
     
-    if (strlen (file_name) > 14 || !filesys_open (file_name))
-      return TID_ERROR; 
+    if (strlen (file_name) > 14)
+      {
+        return TID_ERROR;
+      }
 
+    file_sys_lock_acquire ();
+    if (!filesys_open (file_name))
+      {
+        file_sys_lock_release ();
+        return TID_ERROR;
+      }
+    file_sys_lock_release ();
     struct process_start_aux *psa = malloc (sizeof (struct process_start_aux));
     psa->filename = cmd_copy;
     psa->wait_handler = wh;
-    tid = thread_create (file_name, PRI_DEFAULT, start_child_process, psa);
-    wh->tid = tid;
+    tid = thread_create (file_name, PRI_DEFAULT, start_process, psa);
 
-    if (tid == TID_ERROR)
+    if (tid != TID_ERROR)
       {
-        list_remove (&wh->elem);
-	free (wh);
-	palloc_free_page (cmd_copy);
-	return TID_ERROR;
+        free (cmd_copy_2);
+        wh->tid = tid;
+        sema_down (&psa->wait_handler->wait_sema);
+        if (wh->tid == TID_ERROR)
+          {
+            list_remove (&wh->elem);
+            if (test_set (&wh->destroy))
+              {
+                free (wh);
+              }
+            tid = TID_ERROR;
+          }
       }
+<<<<<<< HEAD
   }
+=======
+    else 
+      {
+        palloc_free_page (cmd_copy);
+      }  
+  } 
+>>>>>>> 01d507088ecf18b3a8d65aeb3573fc406c87624b
   return tid;
-}
-
-static void
-start_child_process (void *psa_aux)
-{
-  struct process_start_aux psa = * (struct process_start_aux *)psa_aux;
-  free (psa_aux);
-  thread_current()-> wait_handler = psa.wait_handler;
-  start_process (psa.filename); 
 }
 
 /* A thread function that loads a user process and starts it
    running. */
 static void
-start_process (void* file_name_)
+start_process (void *psa_)
 {
-  char *file_name = file_name_;
+  struct process_start_aux *psa = psa_;
+  char *file_name = (char *) psa->filename;
   struct intr_frame if_;
   bool success;
 
@@ -125,6 +141,13 @@ start_process (void* file_name_)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (tokens[0], &if_.eip, &if_.esp);
 
+  thread_current ()->wait_handler = psa->wait_handler;
+  if (!success)
+    {
+      psa->wait_handler->tid = TID_ERROR;
+    }
+  sema_up (&psa->wait_handler->wait_sema);
+
   /* If file loaded successfully, set up stack */
   if (success)  
     {
@@ -134,14 +157,33 @@ start_process (void* file_name_)
       /* Push number of args: argc */
       /* Push a fake return address (0) */
       /* All handled by push_all_to_stack */
+    
+      // set psa wait tid to current thread tid
+      psa->wait_handler->tid = thread_current ()->tid;
       push_all_to_stack (tokens, argc, &if_);
     }
+  
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
+<<<<<<< HEAD
   if (!success) {
     thread_exit ();
   }
+=======
+  if (!success) 
+    {
+      if (thread_current ()->pagedir == NULL)
+        {
+          if (test_set (&thread_current ()->wait_handler->destroy))
+            free (thread_current ()->wait_handler);
+        }
+      thread_exit ();
+    }
+  
+  free (psa);
+
+>>>>>>> 01d507088ecf18b3a8d65aeb3573fc406c87624b
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -174,9 +216,13 @@ process_wait (tid_t child_tid)
       child_process = list_entry (e, struct wait_handler, elem);
       if (child_process->tid == child_tid)
         {
+          if (!child_process)
+            {
+              return -1;
+            }
           sema_down (&child_process->wait_sema);
-	  int exit_status = child_process->exit_status;
-	  list_remove(&child_process->elem);
+	        int exit_status = child_process->exit_status;
+	        list_remove(&child_process->elem);
           if (test_set(&child_process->destroy))
             {
               free (child_process);
@@ -203,6 +249,7 @@ process_exit (void)
 	      free (child_process);
       }
   }
+
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
@@ -215,7 +262,6 @@ process_exit (void)
       if (test_set(&cur->wait_handler->destroy))
         {
           free(cur->wait_handler);
-          cur->wait_handler = NULL;
         }
 
 
@@ -225,12 +271,19 @@ process_exit (void)
           struct fd_to_file_mapping *map = list_entry (list_pop_front (&cur->open_fds), struct fd_to_file_mapping, elem);
           if (map->file_struct != NULL)
             {
+              file_sys_lock_acquire ();
               file_close (map->file_struct);
+              file_sys_lock_release ();
             }
           list_remove (&map->elem);
           free (map);
         }
+      
+      file_sys_lock_acquire ();
       file_close (cur -> exe);
+      file_sys_lock_release ();
+
+
       /* Correct ordering here is crucial.  We must set
          cur->pagedir to NULL before switching page directories,
          so that a timer interrupt can't switch back to the
@@ -350,16 +403,22 @@ load (const char *file_name, void (**eip) (void), void **esp)
   process_activate ();
 
   /* Open executable file. */
+  file_sys_lock_acquire ();
   file = filesys_open (file_name);
+  file_sys_lock_release ();
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
 
+  file_sys_lock_acquire ();
   file_deny_write (file);
-  thread_current () -> exe = file;
+  file_sys_lock_release ();
+
+  
   /* Read and verify executable header. */
+  file_sys_lock_acquire ();
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
       || memcmp (ehdr.e_ident, "\177ELF\1\1\1", 7)
       || ehdr.e_type != 2
@@ -368,9 +427,11 @@ load (const char *file_name, void (**eip) (void), void **esp)
       || ehdr.e_phentsize != sizeof (struct Elf32_Phdr)
       || ehdr.e_phnum > 1024) 
     {
+      file_sys_lock_release ();
       printf ("load: %s: error loading executable\n", file_name);
       goto done; 
     }
+  file_sys_lock_release ();
 
   /* Read program headers. */
   file_ofs = ehdr.e_phoff;
@@ -378,12 +439,26 @@ load (const char *file_name, void (**eip) (void), void **esp)
     {
       struct Elf32_Phdr phdr;
 
+      file_sys_lock_acquire ();
       if (file_ofs < 0 || file_ofs > file_length (file))
-        goto done;
-      file_seek (file, file_ofs);
+        {
+          file_sys_lock_release ();
+          goto done;
+        }
+      file_sys_lock_release ();
 
+      file_sys_lock_acquire ();
+      file_seek (file, file_ofs);
+      file_sys_lock_release ();
+
+      file_sys_lock_acquire ();
       if (file_read (file, &phdr, sizeof phdr) != sizeof phdr)
-        goto done;
+        {
+          file_sys_lock_release ();
+          goto done;
+        }
+      file_sys_lock_release ();
+
       file_ofs += sizeof phdr;
       switch (phdr.p_type) 
         {
@@ -438,10 +513,18 @@ load (const char *file_name, void (**eip) (void), void **esp)
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
 
+  t->exe = file;
+
   success = true;
+
+  return success;
 
  done:
   /* We arrive here whether the load is successful or not. */
+
+  file_sys_lock_acquire ();
+  file_close (file);
+  file_sys_lock_release ();
   return success;
 }
 
@@ -458,9 +541,14 @@ validate_segment (const struct Elf32_Phdr *phdr, struct file *file)
   if ((phdr->p_offset & PGMASK) != (phdr->p_vaddr & PGMASK)) 
     return false; 
 
+  file_sys_lock_acquire ();
   /* p_offset must point within FILE. */
   if (phdr->p_offset > (Elf32_Off) file_length (file)) 
-    return false;
+    {
+      file_sys_lock_release ();
+      return false;
+    }
+  file_sys_lock_release ();
 
   /* p_memsz must be at least as big as p_filesz. */
   if (phdr->p_memsz < phdr->p_filesz) 
@@ -516,7 +604,9 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (ofs % PGSIZE == 0);
 
+  file_sys_lock_acquire ();
   file_seek (file, ofs);
+  file_sys_lock_release ();
   while (read_bytes > 0 || zero_bytes > 0) 
     {
       /* Calculate how to fill this page.
@@ -554,9 +644,14 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       }
 
       /* Load data into the page. */
-      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes){
-        return false; 
-      }
+      file_sys_lock_acquire ();
+      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
+        {
+          file_sys_lock_release ();
+          return false; 
+        }
+      file_sys_lock_release ();
+
       memset (kpage + page_read_bytes, 0, page_zero_bytes);
 
       /* Advance. */

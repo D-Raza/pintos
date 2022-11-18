@@ -20,4 +20,7 @@ struct fd_to_file_mapping {
 };
 void syscall_init (void);
 
+void file_sys_lock_acquire (void);
+void file_sys_lock_release (void);
+
 #endif /* userprog/syscall.h */

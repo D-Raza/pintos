@@ -27,7 +27,23 @@ bool FILESYS_LOCK_ACQUIRE = false;
 void
 syscall_init (void) 
 {
+  
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
+  lock_init (&file_sys_lock);
+}
+
+void 
+file_sys_lock_acquire (void)
+{
+  lock_acquire (&file_sys_lock);
+  // FILESYS_LOCK_ACQUIRE = true;
+}
+
+void
+file_sys_lock_release (void)
+{
+  lock_release (&file_sys_lock);
+  // FILESYS_LOCK_ACQUIRE = false;
 }
 
 static bool
@@ -211,7 +227,7 @@ sys_exit (int args[]){
   int status = args[0];
 
   thread_current ()->wait_handler->exit_status = status;
-  process_exit ();
+  thread_exit ();
   return 0;
 }
 
@@ -268,9 +284,9 @@ sys_create (int args[])
     }
 
   /* Create new file struct containing file, which adds file to directory */
-  lock_acquire (&file_sys_lock);
+  file_sys_lock_acquire ();
   bool created = filesys_create (file_name, initial_size);
-  lock_release (&file_sys_lock); 
+  file_sys_lock_release (); 
   return created; // as false is equivalent to 0 in c
 }
 
@@ -286,9 +302,9 @@ sys_remove (int args[])
     {
       thread_exit ();
     }
-  lock_acquire (&file_sys_lock);
+  file_sys_lock_acquire ();
   bool removed = filesys_remove (file_name);
-  lock_release (&file_sys_lock);
+  file_sys_lock_release ();
   return removed;
 }
 
@@ -303,8 +319,9 @@ sys_open (int args[])
     {
       thread_exit ();
     }
-  lock_acquire (&file_sys_lock);
+  file_sys_lock_acquire ();
   struct file *file = filesys_open (file_name);
+  file_sys_lock_release ();
   if (file == NULL) {
     return -1;
   }
@@ -314,8 +331,6 @@ sys_open (int args[])
   mapping->file_struct = file;
   list_push_back (&thread_current ()->open_fds, &mapping->elem);
 //  thread_current ()->next_free_fd ++;// &thread_current ()->next_free_fd;
-
-  lock_release (&file_sys_lock);
   return mapping->fd;
 }
 
@@ -325,9 +340,9 @@ sys_filesize (int args[])
 {
   int fd = args[0];
   struct file *fd_file = get_file (fd);
-  lock_acquire (&file_sys_lock);
+  file_sys_lock_acquire ();
   int size = file_length (fd_file);
-  lock_release (&file_sys_lock);
+  file_sys_lock_release ();
   return size;
 }
 
@@ -353,9 +368,9 @@ sys_read (int args[])
 
       thread_exit ();
     }
-  lock_acquire (&file_sys_lock);
+  file_sys_lock_acquire ();
   int read_size = file_read (fd_file, buffer, size);
-  lock_release (&file_sys_lock);
+  file_sys_lock_release ();
   return read_size;
 }
 
@@ -390,9 +405,9 @@ sys_write (int args[])
       {
         thread_exit ();
       }
-    lock_acquire (&file_sys_lock);
+    file_sys_lock_acquire ();
     written_size = file_write (fd_file, buffer, size);
-    lock_release (&file_sys_lock);
+    file_sys_lock_release ();
     return written_size;
   }
 }
@@ -406,13 +421,14 @@ sys_seek (int args[]) {
   if (fd == STDIN_FILENO || fd == STDOUT_FILENO){
     return -1;
   }
-  lock_acquire (&file_sys_lock);
   struct file *fd_file = get_file (fd);
   if (!fd_file){
     return -1;
   }
+  file_sys_lock_acquire ();
   file_seek (fd_file, position);
-  lock_release (&file_sys_lock);
+  file_sys_lock_release ();
+  return 0;
 }
 
 /* Returns the position of the next byte to be read or written in open file fd */
@@ -427,9 +443,9 @@ sys_tell (int args[])
   if (!fd_file){
     return -1;
   }
-  lock_acquire (&file_sys_lock);
+  file_sys_lock_acquire ();
   int position = file_tell (fd_file);
-  lock_release (&file_sys_lock);
+  file_sys_lock_release ();
   return position;
 }
 
@@ -443,7 +459,9 @@ sys_close (int args[]){
   struct fd_to_file_mapping *map = get_map (fd);
   if (map != NULL)
     {
+      file_sys_lock_acquire ();
       file_close (map->file_struct);
+      file_sys_lock_release ();
       list_remove (&map->elem);
       free (map);
     }
@@ -461,11 +479,13 @@ void validate_pointer (const void *vaddr, int args[])
 static void
 syscall_handler (struct intr_frame *f)
 {
+  /*
   if (!FILESYS_LOCK_ACQUIRE)
   {
     lock_init(&file_sys_lock);
     FILESYS_LOCK_ACQUIRE = true;
   }
+  */
 
   struct syscalls sys_functions[] = {{sys_halt, 0}, {sys_exit, 1}, {sys_exec, 1}, {sys_wait, 1},
 	  {sys_create, 2}, {sys_remove, 1}, {sys_open, 1}, {sys_filesize, 1}, {sys_read, 3},
