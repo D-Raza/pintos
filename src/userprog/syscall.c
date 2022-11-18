@@ -476,7 +476,9 @@ syscall_handler (struct intr_frame *f)
 
   };
 
-  /* checks that esp is an enum */
+  struct thread* cur = thread_current ();
+  cur->syscall = true;
+
   if (!mem_try_read_buffer (f->esp, sizeof (int)))
     {
       thread_exit ();
@@ -486,6 +488,7 @@ syscall_handler (struct intr_frame *f)
     {
       int *args = f->esp + 4;
       f->eax = (sys_functions[syscall_no])(args);
+      cur->syscall = false;
     }
   else 
     {
