@@ -74,12 +74,12 @@ process_execute (const char *cmd)
     tid = thread_create (file_name, PRI_DEFAULT, start_child_process, psa);
     wh->tid = tid;
 
-    printf ("tid is %d\n", tid);
-    printf ("TID_ERROR is %d\n", TID_ERROR);
+    //printf ("tid is %d\n", tid);
+    //printf ("TID_ERROR is %d\n", TID_ERROR);
 
     if (tid == TID_ERROR)
       {
-	printf ("Enters TID is error\n");
+	//printf ("Enters TID is error\n");
         list_remove (&wh->elem);
 	free (wh);
 	palloc_free_page (cmd_copy);
@@ -129,12 +129,12 @@ start_process (void* file_name_)
   /* If not, then free, and kill */
   if (calc_total_size(tokens, argc) >= MAX_CMDS_SIZE) 
     {
-      printf("NUMBER OF ARGS IS SUITABLEi\n");
+      //printf("NUMBER OF ARGS IS SUITABLEi\n");
       palloc_free_page (file_name);
       thread_exit ();
     }
   
-  printf("NUMBER OF ARGS IS SUITABLE\n");
+  //printf("NUMBER OF ARGS IS SUITABLE\n");
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
@@ -145,7 +145,7 @@ start_process (void* file_name_)
   /* If file loaded successfully, set up stack */
   if (success)  
     {
-      printf ("LOAD IS SUCCESSFUL"); // gets here
+      //printf ("LOAD IS SUCCESSFUL"); // gets here
       /* Push args on stack in reverse order */
       /* Push argv[argc] = NULL (a null pointer) */  
       /* In reverse order, push pointers to args on stack */
@@ -156,9 +156,9 @@ start_process (void* file_name_)
     }
 
   /* If load failed, quit. */
-  printf ("REACHES PALLOC_FREE_PAGE \n");
+  //printf ("REACHES PALLOC_FREE_PAGE \n");
   palloc_free_page (file_name);
-  printf ("FINISHES PALLOC_FREE_PAGE \n");
+  //printf ("FINISHES PALLOC_FREE_PAGE \n");
   if (!success) 
     printf ("LOAD FAILED\n");
     thread_exit ();
@@ -170,7 +170,7 @@ start_process (void* file_name_)
      we just point the stack pointer (%esp) to our stack frame
      and jump to it. */
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
-  printf("REACHES ASM VOLATILE\n");
+  //printf("REACHES ASM VOLATILE\n");
   NOT_REACHED ();
 }
 
