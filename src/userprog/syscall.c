@@ -12,22 +12,42 @@
 #include "devices/shutdown.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
+#include "threads/malloc.h"
 #include <list.h>
 #include <string.h>
-#include <stdlib.h>
 #include <debug.h>
 
 static void syscall_handler (struct intr_frame *);
-static void validate_pointer (const void *vaddr, int *args);
 static bool validate_string (const char *str);
 static int get_user (const uint8_t *uaddr);
 static bool put_user (uint8_t *udst, uint8_t byte);
-bool FILESYS_LOCK_ACQUIRE = false;
+static bool validate_string (const char *str);
+static int get_user (const uint8_t *uaddr);
+static bool put_user (uint8_t *udst, uint8_t byte);
+static bool mem_try_read_buffer (const void *buffer, unsigned size);
+static bool  mem_try_write_buffer (const void *buffer, unsigned size);
+static void get_stack_args (struct intr_frame *f,  int *args, int num_of_args);
+static struct fd_to_file_mapping* get_map (int fd);
+static struct file* get_file (int fd);
+static int get_new_fd (void);
+static int sys_halt (int args[] UNUSED);
+static int sys_exit (int args[]);
+static pid_t sys_exec (int args[]);
+static int sys_wait (int args[]);
+static int sys_create (int args[]);
+static int sys_remove (int args[]);
+static int sys_open (int args[]);
+static int sys_filesize (int args[]);
+static int sys_read (int args[]);
+static int sys_write (int args[]);
+static int sys_seek (int args[]);
+static int sys_tell (int args[]);
+static int sys_close (int args[]);
+
 
 void
 syscall_init (void) 
 {
-  
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
   lock_init (&file_sys_lock);
 }
@@ -36,33 +56,31 @@ void
 file_sys_lock_acquire (void)
 {
   lock_acquire (&file_sys_lock);
-  // FILESYS_LOCK_ACQUIRE = true;
 }
 
 void
 file_sys_lock_release (void)
 {
   lock_release (&file_sys_lock);
-  // FILESYS_LOCK_ACQUIRE = false;
 }
 
 static bool
 validate_string (const char *str)
-  {
-    if (get_user((void *) str) == -1 || !is_user_vaddr (str))
-      {
-        return false;
-      }
-    while (*str != '\0')
-      {
-        if (get_user((void *) str) == -1 || !is_user_vaddr (str))
-          {
-            return false;
-          }
-        str++;
-      }
-    return true;
-  }
+{
+  if (get_user((void *) str) == -1 || !is_user_vaddr (str))
+    {
+      return false;
+    }
+  while (*str != '\0')
+    {
+      if (get_user((void *) str) == -1 || !is_user_vaddr (str))
+        {
+          return false;
+        }
+      str++;
+    }
+  return true;
+}
 
 /* Reads a byte at user virtual address UADDR.
    UADDR must be below PHYS_BASE.
@@ -89,91 +107,60 @@ put_user (uint8_t *udst, uint8_t byte)
   return error_code != -1;
 }
 
-/* Attempts to read user data from uaddr. 
-   If access invalid returns -1. */
-static int
-mem_try_read (const uint8_t *uaddr)
-{
-  if (is_user_vaddr (uaddr))
-    {
-      return get_user (uaddr);
-    }
-  else
-    {
-      return -1;
-    }
-}
-
-/* Attempts to write data byte to user address udst.
-   Return true if successful and false otherwise. */
-static bool
-mem_try_write (uint8_t *udst, uint8_t byte)
-{
-  if (is_user_vaddr (udst))
-    {
-      return put_user (udst, byte);
-    }
-  else
-  {
-    return false;
-  }
-}
-
 /* Checks if a buffer can be safely read */
 static bool
 mem_try_read_buffer (const void *buffer, unsigned size)
-  {
-    const uint8_t *buff = buffer;
-    if (!size) 
-      {
-        return true;
-      }
-    if (!is_user_vaddr (buff + size))
-      {
-        return false;
-      } 
-    for (uint8_t *p = (uint8_t *) ((uintptr_t)buff / PGSIZE * PGSIZE);
-         p <= buff; p += PGSIZE)
-      {
-        if (get_user ((void *) p) == -1)
-          {
-            return false;
-          }
-      }
-    return true;
-  }
+{
+  const uint8_t *buff = buffer;
+  if (!size) 
+    {
+      return true;
+    }
+  if (!is_user_vaddr (buff + size))
+    {
+      return false;
+    } 
+  for (uint8_t *p = (uint8_t *) ((uintptr_t)buff / PGSIZE * PGSIZE);
+       p <= buff; p += PGSIZE)
+    {
+      if (get_user ((void *) p) == -1)
+        {
+          return false;
+        }
+    }
+  return true;
+}
 
 static bool 
 mem_try_write_buffer (const void *buffer, unsigned size)
-  {
-    const uint8_t *buff = buffer;
-    if (!is_user_vaddr (buff + size))
-      {
-        return false;
-      }
-    if (!size) 
-      {
-        return true;
-      }
-    for (uint8_t *p = (uint8_t *)(((uintptr_t)buff / PGSIZE) * PGSIZE);
-         p <= buff; p += PGSIZE)
-      {
-        if (!put_user (p, get_user (p)))
-          {
-            return false;
-          }
-      }
-    return true;
-  }
+{
+  const uint8_t *buff = buffer;
+  if (!is_user_vaddr (buff + size))
+    {
+      return false;
+    }
+  if (!size) 
+    {
+      return true;
+    }
+  for (uint8_t *p = (uint8_t *)(((uintptr_t)buff / PGSIZE) * PGSIZE);
+       p <= buff; p += PGSIZE)
+    {
+      if (!put_user (p, get_user (p)))
+        {
+          return false;
+        }
+    }
+  return true;
+}
 
 /* gets arguments from the stack and stores them in the array args */
 static void
 get_stack_args (struct intr_frame *f,  int *args, int num_of_args)
 {
   for (int i = 0; i < num_of_args; i++){
-    int *pointer = * (int *) (f->esp + i*4 + 4);
+    int pointer = * (int *) (f->esp + i*4 + 4);
     args[i] = pointer;
-    // have some sort of error for invalid pointers
   }
 }	
 
@@ -204,7 +191,7 @@ get_file (int fd)
   return NULL;
 }
 
-static int get_new_fd ()
+static int get_new_fd (void)
 {
   thread_current () -> next_free_fd++;
   return thread_current () ->next_free_fd;
@@ -214,7 +201,8 @@ static int get_new_fd ()
    shutdown_power_off() 
 */
 static int 
-sys_halt (int args[] UNUSED){
+sys_halt (int args[] UNUSED)
+{
   shutdown_power_off();
   return 0;
 }
@@ -223,7 +211,8 @@ sys_halt (int args[] UNUSED){
    A status of 0 is a success.
 */
 static int 
-sys_exit (int args[]){
+sys_exit (int args[])
+{
   int status = args[0];
 
   thread_current ()->wait_handler->exit_status = status;
@@ -278,7 +267,7 @@ sys_create (int args[])
       thread_exit ();
     }
 
-  if (*file_name == NULL)
+  if (file_name == NULL)
     {
       return false;
     }
@@ -330,7 +319,6 @@ sys_open (int args[])
   mapping->fd = get_new_fd ();
   mapping->file_struct = file;
   list_push_back (&thread_current ()->open_fds, &mapping->elem);
-//  thread_current ()->next_free_fd ++;// &thread_current ()->next_free_fd;
   return mapping->fd;
 }
 
@@ -386,16 +374,12 @@ sys_write (int args[])
     {
       return -1;
     }
-  else if (fd == STDOUT_FILENO){
-    /*while (size > 300){
-      putbuf (buffer, 300);
-      buffer += 300;
-      written_size += 300;
-    }*/
-    putbuf (buffer, size - written_size);
-    written_size = size;
-    return written_size;
-  }
+  else if (fd == STDOUT_FILENO)
+    {
+      putbuf (buffer, size - written_size);
+      written_size = size;
+      return written_size;
+    }
   else {
     struct file *fd_file = get_file (fd);
     if (!fd_file){
@@ -415,7 +399,8 @@ sys_write (int args[])
 /* Changes the next byte to be read or written in open file fd to position, expressed in bytes
 from the beginning of the file. */
 static int
-sys_seek (int args[]) {
+sys_seek (int args[]) 
+{
   int fd = args[0];
   unsigned position = (unsigned) args[1];
   if (fd == STDIN_FILENO || fd == STDOUT_FILENO){
@@ -436,13 +421,15 @@ static int
 sys_tell (int args[])
 {
   int fd = args[0];
-  if (fd == STDIN_FILENO || fd == STDOUT_FILENO){
-    return -1;
-  }
+  if (fd == STDIN_FILENO || fd == STDOUT_FILENO)
+    {
+      return -1;
+    }
   struct file *fd_file = get_file (fd);
-  if (!fd_file){
-    return -1;
-  }
+  if (!fd_file)
+    {
+      return -1;
+    }
   file_sys_lock_acquire ();
   int position = file_tell (fd_file);
   file_sys_lock_release ();
@@ -451,11 +438,13 @@ sys_tell (int args[])
 
 /* Closes file descriptor fd.*/
 static int 
-sys_close (int args[]){
+sys_close (int args[])
+{
   int fd = args[0];
-  if (fd == STDIN_FILENO || fd == STDOUT_FILENO){
-    return -1;
-  }
+  if (fd == STDIN_FILENO || fd == STDOUT_FILENO)
+    {
+      return -1;
+    }
   struct fd_to_file_mapping *map = get_map (fd);
   if (map != NULL)
     {
@@ -468,25 +457,9 @@ sys_close (int args[]){
   return 0;
 }
 
-void validate_pointer (const void *vaddr, int args[])
-{
-  if (vaddr < PHYS_BASE) 
-  {
-    sys_halt(args); // to change to sys_exit (currently unfinished)
-  }
-}
-
 static void
 syscall_handler (struct intr_frame *f)
 {
-  /*
-  if (!FILESYS_LOCK_ACQUIRE)
-  {
-    lock_init(&file_sys_lock);
-    FILESYS_LOCK_ACQUIRE = true;
-  }
-  */
-
   struct syscalls sys_functions[] = {{sys_halt, 0}, {sys_exit, 1}, {sys_exec, 1}, {sys_wait, 1},
 	  {sys_create, 2}, {sys_remove, 1}, {sys_open, 1}, {sys_filesize, 1}, {sys_read, 3},
 	  {sys_write, 3}, {sys_seek, 2}, {sys_tell, 1}, {sys_close, 1}};
@@ -496,16 +469,16 @@ syscall_handler (struct intr_frame *f)
 
   /* checks that esp is an enum */
   if (!mem_try_read_buffer (f->esp, sizeof (int)))
-  {
-    thread_exit ();
-  }
+    {
+      thread_exit ();
+    }
   int syscall_no = * (int *) f->esp;
   if (syscall_no >= 0 && syscall_no < SYS_INUMBER)
-  {
+    {
       int args[sys_functions[syscall_no].num_of_args];
       get_stack_args(f, args, sys_functions[syscall_no].num_of_args);
       f->eax = (sys_functions[syscall_no].sys_call)(args);
-  }
+    }
   else 
     {
       thread_exit ();
