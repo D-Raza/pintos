@@ -58,7 +58,7 @@ process_execute (const char *cmd)
     char *cmd_copy_2 = malloc(strlen(cmd) + 1);
     strlcpy (cmd_copy_2, cmd, strlen(cmd) + 1);
     char *file_name = strtok_r (cmd_copy_2, " ", &save_ptr);
-
+    
     ASSERT (file_name != NULL);
     
     if (strlen (file_name) > 14 || !filesys_open (file_name))
@@ -72,6 +72,7 @@ process_execute (const char *cmd)
     if (tid != TID_ERROR)
       {
         free (cmd_copy_2);
+        wh->tid = tid;
         sema_down (&psa->wait_handler->wait_sema);
         if (wh->tid == TID_ERROR)
           {
@@ -123,6 +124,11 @@ start_process (void *psa_)
   success = load (tokens[0], &if_.eip, &if_.esp);
 
   thread_current ()->wait_handler = psa->wait_handler;
+  if (!success)
+    {
+      psa->wait_handler->tid = TID_ERROR;
+    }
+  sema_up (&psa->wait_handler->wait_sema);
 
   /* If file loaded successfully, set up stack */
   if (success)  
@@ -136,17 +142,14 @@ start_process (void *psa_)
     
       // set psa wait tid to current thread tid
       psa->wait_handler->tid = thread_current ()->tid;
-      // sema_up (&thread_current ()->wait_handler->wait_sema);
       push_all_to_stack (tokens, argc, &if_);
     }
   
-  sema_up (&psa->wait_handler->wait_sema);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
   if (!success) 
     {
-      sema_up(&thread_current ()->wait_handler->wait_sema);
       if (thread_current ()->pagedir == NULL)
         {
           if (test_set (&thread_current ()->wait_handler->destroy))
