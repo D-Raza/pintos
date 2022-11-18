@@ -48,18 +48,24 @@ syscall_init (void)
   lock_init (&file_sys_lock);
 }
 
+/* helper function to acquire the file_sys_lock */
 void 
 file_sys_lock_acquire (void)
 {
   lock_acquire (&file_sys_lock);
 }
 
+/* helper function to release the file_sys_lock */
 void
 file_sys_lock_release (void)
 {
   lock_release (&file_sys_lock);
 }
 
+/* Returns true if the address to the string is a user address
+   and successfully returns its byte value,
+   false if the address of the string is a kernel address
+   or a segfault occurred when reading the byte value.   */
 static bool
 validate_string (const char *str)
 {
@@ -103,7 +109,10 @@ put_user (uint8_t *udst, uint8_t byte)
   return error_code != -1;
 }
 
-/* Checks if a buffer can be safely read */
+/* Checks if a buffer can be safely read.
+   Returns true if successful and false if the buffer is null, 
+   not a user virtual address or there is a segfault when reading
+   a byte from the buffer*/
 static bool
 mem_try_read_buffer (const void *buffer, unsigned size)
 {
@@ -127,6 +136,10 @@ mem_try_read_buffer (const void *buffer, unsigned size)
   return true;
 }
 
+/* Checks if a buffer can be safely written to.
+   Returns true if successful and false if the buffer is null, 
+   if the end of the buffer is a user virtual address or there
+   is a segfault when writing a byte to the buffer */
 static bool 
 mem_try_write_buffer (const void *buffer, unsigned size)
 {
@@ -150,6 +163,9 @@ mem_try_write_buffer (const void *buffer, unsigned size)
   return true;
 }
 
+/* Gets the struct mapping a file descriptor to its corresponding file pointer. 
+   Returns null if the list of mappings of open files is empty
+   or if the mapping cannot be found. */
 static struct fd_to_file_mapping*
 get_map (int fd)
 {
@@ -165,12 +181,14 @@ get_map (int fd)
       } 
     else if (map->fd > fd)
       {
-        return NULL; /* as the list is ordered */
+        return NULL; /* as the list is ordered by ascending fd*/
       }
   }
   return NULL;
 }
 
+/* Gets the file corresponding to the file descriptor argument using get_map ().
+   Returns null if there is no map corresponding to the file descriptor.*/
 static struct file*
 get_file (int fd)
 {
@@ -182,6 +200,8 @@ get_file (int fd)
   return NULL;
 }
 
+/* Returns value of the next file descriptor available to use 
+and sets it in the thread struct*/
 static int get_new_fd (void)
 {
   thread_current () -> next_free_fd++;
@@ -305,7 +325,6 @@ sys_open (int args[])
   if (file == NULL) {
     return -1;
   }
-  // Add file to struct and create fd
   struct fd_to_file_mapping *mapping = malloc (sizeof (struct fd_to_file_mapping));
   mapping->fd = get_new_fd ();
   mapping->file_struct = file;
@@ -325,8 +344,10 @@ sys_filesize (int args[])
   return size;
 }
 
-/* Reads size bytes from the file open as fd into buffer */
-/* Returns -1 if reading from stdout (fd = 1) */
+/* Reads size bytes from the open file fd into buffer 
+   and returns the number of bytes read into buffer.
+   Returns -1 if reading from stdout (fd = 1) or
+   if the file pointer is null*/
 static int 
 sys_read (int args[])
 {
@@ -353,6 +374,10 @@ sys_read (int args[])
   return read_size;
 }
 
+/* Writes size bytes from buffer into open file fd
+   and returns the number of bytes written from buffer.
+   Returns -1 if the file descriptor is reading from stdout (fd is 1)
+   or if the file pointer is null. */
 static int 
 sys_write (int args[])
 {
@@ -448,6 +473,9 @@ sys_close (int args[])
   return 0;
 }
 
+/* Calls system calls by using an array of function pointers to them and maps 
+   syscall number to the appropriate function and number of arguments.
+   If esp cannot be read or the syscall number is not valid, thread_exit is called.  */
 static void
 syscall_handler (struct intr_frame *f)
 {
