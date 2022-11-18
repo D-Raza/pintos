@@ -460,6 +460,8 @@ sys_close (int args[])
 static void
 syscall_handler (struct intr_frame *f)
 {
+  struct thread* cur = thread_current ();
+  cur->syscall = true;
   struct syscalls sys_functions[] = {{sys_halt, 0}, {sys_exit, 1}, {sys_exec, 1}, {sys_wait, 1},
 	  {sys_create, 2}, {sys_remove, 1}, {sys_open, 1}, {sys_filesize, 1}, {sys_read, 3},
 	  {sys_write, 3}, {sys_seek, 2}, {sys_tell, 1}, {sys_close, 1}};
@@ -478,6 +480,7 @@ syscall_handler (struct intr_frame *f)
       int args[sys_functions[syscall_no].num_of_args];
       get_stack_args(f, args, sys_functions[syscall_no].num_of_args);
       f->eax = (sys_functions[syscall_no].sys_call)(args);
+      cur->syscall = false;
     }
   else 
     {

@@ -578,6 +578,7 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init (&t->child_processes);
   list_init (&t->open_fds);
   t->next_free_fd = 1;
+  t->syscall = false;
 #endif
   t->magic = THREAD_MAGIC;
 
