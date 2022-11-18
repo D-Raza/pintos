@@ -21,12 +21,11 @@
 #include "threads/vaddr.h"
 
 static thread_func start_process NO_RETURN;
-static thread_func start_child_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 static bool test_set (bool *b);
-
 static void tokenize_args (char *file_name, char **argv);
 static int get_argc (char *file_name);
+static void push_to_stack (void *to_push, void **esp, bool is_str_push);
 static void push_all_to_stack (char **argv, int argc, struct intr_frame *if_);
 
 /* Starts a new thread running a user program loaded from
@@ -42,62 +41,65 @@ process_execute (const char *cmd)
   struct thread *cur = thread_current ();
   struct wait_handler *wh = malloc (sizeof (struct wait_handler));
 
-  if (wh) {
-    sema_init (&wh->wait_sema, 0);
-    wh->tid = TID_ERROR;
-    wh->destroy = 0;
-    wh->exit_status = -1;
-    list_push_back (&cur->child_processes, &wh->elem);
+  if (wh) 
+    {
+      sema_init (&wh->wait_sema, 0);
+      wh->tid = TID_ERROR;
+      wh->destroy = 0;
+      wh->exit_status = -1;
+      list_push_back (&cur->child_processes, &wh->elem);
 
-    char *save_ptr;
-    cmd_copy = palloc_get_page (0);
-    if (cmd_copy == NULL)
-      return TID_ERROR;
-    strlcpy (cmd_copy, cmd, PGSIZE);
-    
-    char *cmd_copy_2 = malloc(strlen(cmd) + 1);
-    strlcpy (cmd_copy_2, cmd, strlen(cmd) + 1);
-    char *file_name = strtok_r (cmd_copy_2, " ", &save_ptr);
-    
-    ASSERT (file_name != NULL);
-    
-    if (strlen (file_name) > 14)
-      {
-        return TID_ERROR;
-      }
+      char *save_ptr;
+      cmd_copy = palloc_get_page (0);
+      if (cmd_copy == NULL)
+        {
+          return TID_ERROR;
+        }
+      strlcpy (cmd_copy, cmd, PGSIZE);
 
-    file_sys_lock_acquire ();
-    if (!filesys_open (file_name))
-      {
-        file_sys_lock_release ();
-        return TID_ERROR;
-      }
-    file_sys_lock_release ();
-    struct process_start_aux *psa = malloc (sizeof (struct process_start_aux));
-    psa->filename = cmd_copy;
-    psa->wait_handler = wh;
-    tid = thread_create (file_name, PRI_DEFAULT, start_process, psa);
+      char *cmd_copy_2 = malloc(strlen(cmd) + 1);
+      strlcpy (cmd_copy_2, cmd, strlen(cmd) + 1);
+      char *file_name = strtok_r (cmd_copy_2, " ", &save_ptr);
 
-    if (tid != TID_ERROR)
-      {
-        free (cmd_copy_2);
-        wh->tid = tid;
-        sema_down (&psa->wait_handler->wait_sema);
-        if (wh->tid == TID_ERROR)
-          {
-            list_remove (&wh->elem);
-            if (test_set (&wh->destroy))
-              {
-                free (wh);
-              }
-            tid = TID_ERROR;
-          }
-      }
-    else 
-      {
-        palloc_free_page (cmd_copy);
-      }  
-  } 
+      ASSERT (file_name != NULL);
+
+      if (strlen (file_name) > 14)
+        {
+          return TID_ERROR;
+        }
+
+      file_sys_lock_acquire ();
+      if (!filesys_open (file_name))
+        {
+          file_sys_lock_release ();
+          return TID_ERROR;
+        }
+      file_sys_lock_release ();
+      struct process_start_aux *psa = malloc (sizeof (struct process_start_aux));
+      psa->filename = cmd_copy;
+      psa->wait_handler = wh;
+      tid = thread_create (file_name, PRI_DEFAULT, start_process, psa);
+
+      if (tid != TID_ERROR)
+        {
+          free (cmd_copy_2);
+          wh->tid = tid;
+          sema_down (&psa->wait_handler->wait_sema);
+          if (wh->tid == TID_ERROR)
+            {
+              list_remove (&wh->elem);
+              if (test_set (&wh->destroy))
+                {
+                  free (wh);
+                }
+              tid = TID_ERROR;
+            }
+        }
+      else 
+        {
+          palloc_free_page (cmd_copy);
+        }  
+    } 
   return tid;
 }
 
@@ -162,7 +164,9 @@ start_process (void *psa_)
       if (thread_current ()->pagedir == NULL)
         {
           if (test_set (&thread_current ()->wait_handler->destroy))
-            free (thread_current ()->wait_handler);
+            {
+              free (thread_current ()->wait_handler);
+            }
         }
       thread_exit ();
     }
@@ -227,13 +231,15 @@ process_exit (void)
 
 
   /* Free all processes in the child_processes list */
-  while (!list_empty (&cur->child_processes)) {
-    struct wait_handler *child_process = list_entry (list_pop_front (&cur->child_processes), struct wait_handler, elem);
-    if (test_set(&child_process->destroy))
-      {
-	      free (child_process);
-      }
-  }
+  while (!list_empty (&cur->child_processes)) 
+    {
+      struct wait_handler *child_process = list_entry 
+                          (list_pop_front (&cur->child_processes), struct wait_handler, elem);
+      if (test_set(&child_process->destroy))
+        {
+	        free (child_process);
+        }
+    }
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -253,7 +259,8 @@ process_exit (void)
       /* Iterate through all open files and close them. */
       while (!list_empty (&cur->open_fds)) 
         {
-          struct fd_to_file_mapping *map = list_entry (list_pop_front (&cur->open_fds), struct fd_to_file_mapping, elem);
+          struct fd_to_file_mapping *map = list_entry 
+                    (list_pop_front (&cur->open_fds), struct fd_to_file_mapping, elem);
           if (map->file_struct != NULL)
             {
               file_sys_lock_acquire ();
@@ -497,16 +504,11 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
-
   t->exe = file;
-
   success = true;
-
   return success;
 
  done:
-  /* We arrive here whether the load is successful or not. */
-
   file_sys_lock_acquire ();
   file_close (file);
   file_sys_lock_release ();
@@ -614,19 +616,20 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
         
         /* Add the page to the process's address space. */
         if (!install_page (upage, kpage, writable)) 
+          {
+            palloc_free_page (kpage);
+            return false; 
+          }     
+        
+      } 
+      else 
         {
-          palloc_free_page (kpage);
-          return false; 
-        }     
-        
-      } else {
-        
-        /* Check if writable flag for the page should be updated */
-        if(writable && !pagedir_is_writable(t->pagedir, upage)){
-          pagedir_set_writable(t->pagedir, upage, writable); 
+          /* Check if writable flag for the page should be updated */
+          if(writable && !pagedir_is_writable(t->pagedir, upage))
+            {
+              pagedir_set_writable(t->pagedir, upage, writable); 
+            }
         }
-        
-      }
 
       /* Load data into the page. */
       file_sys_lock_acquire ();
@@ -699,10 +702,11 @@ tokenize_args(char *file_name, char **argv)
     int i = 0;
 
     for (token = strtok_r(file_name_copy, " ", &save_ptr); token != NULL; 
-         token = strtok_r(NULL, " ", &save_ptr)) {
-          argv[i] = token;
-          i++;
-    }
+         token = strtok_r(NULL, " ", &save_ptr)) 
+      {
+        argv[i] = token;
+        i++;
+      }
   } 
 
 /* Returns the number of arguments + filename */
@@ -720,22 +724,26 @@ get_argc (char *file_name)
 
     /* Iterate through the tokens, splitting at spaces, and increment the number of arguments */
     for (token = strtok_r (file_name_copy, " ", &save_ptr); token != NULL;
-         token = strtok_r (NULL, " ", &save_ptr)) {
-          argc++;
-         }
+         token = strtok_r (NULL, " ", &save_ptr)) 
+      {
+        argc++;
+      }
     return argc; 
   }
 
 static void 
 push_to_stack (void *to_push, void **esp, bool is_str_push) {
-   if (is_str_push) {
-     int size = strlen(to_push) + 1;
-     *esp -= size;
-     strlcpy ((char *) *esp, to_push, size);
-   } else {
-     *esp -= sizeof(to_push);
-     * (void **) *esp = to_push;
-   }
+   if (is_str_push) 
+    {
+      int size = strlen(to_push) + 1;
+      *esp -= size;
+      strlcpy ((char *) *esp, to_push, size);
+    } 
+   else 
+    {
+      *esp -= sizeof(to_push);
+      * (void **) *esp = to_push;
+    }
  }
 
 /* Pushes all that is required onto the stack:
@@ -748,46 +756,46 @@ push_to_stack (void *to_push, void **esp, bool is_str_push) {
 
 static void
 push_all_to_stack (char **argv, int argc, struct intr_frame *if_) 
-  {
-    void **esp = &if_->esp; 
+{
+  void **esp = &if_->esp; 
 
-    char *arg_ptrs[argc];
+  char *arg_ptrs[argc];
 
-    /* Round the stack pointer down to a multiple of 4 before the first push onto the stack */
-    while (((int) *esp) % WORD_SIZE != 0) {
-      (*esp)--;
-    }
+  /* Word-align stack */
+  *esp -= (unsigned int) *esp % WORD_SIZE;
 
-    /* Push the arguments, one by one, in reverse order */
-    int count = argc - 1;
-    while (count >= 0) {
+  /* Push the arguments, one by one, in reverse order */
+  int count = argc - 1;
+  while (count >= 0) 
+    {
       push_to_stack(argv[count], esp, true);
       arg_ptrs[count] = *esp;
       count--;
     }
 
-    /* Move esp so that the address is word-aligned */ 
-    *esp -= (unsigned int) *esp % WORD_SIZE;
+  /* Move esp so that the address is word-aligned */ 
+  *esp -= (unsigned int) *esp % WORD_SIZE;
 
-    /* Push sentinel entry */
-    push_to_stack((void*) 0x00000000, esp, false);
+  /* Push sentinel entry */
+  push_to_stack((void*) 0x00000000, esp, false);
 
-    /* Push pointers to the arguments, one by one, in reverse order */
-    count = argc - 1;
-    while (count >= 0) {
+  /* Push pointers to the arguments, one by one, in reverse order */
+  count = argc - 1;
+  while (count >= 0) 
+    {
       push_to_stack(arg_ptrs[count], esp, false);      
       count--;
     }
 
-    /* Push the pointer to the first pointer in argv, (esp at the time of calling) */
-    push_to_stack(*esp, esp, false);
+  /* Push the pointer to the first pointer in argv, (esp at the time of calling) */
+  push_to_stack(*esp, esp, false);
 
-    /* Push the number of arguments */
-    push_to_stack((void *) argc, esp, false);
+  /* Push the number of arguments */
+  push_to_stack((void *) argc, esp, false);
 
-    /* Push fake return address */
-    push_to_stack((void *) 0xD0C0FFEE, esp, false);
-  }
+  /* Push fake return address */
+  push_to_stack((void *) FAKE_ADDRESS, esp, false);
+}
 
 
 static bool
@@ -795,4 +803,3 @@ test_set (bool *b)
 {
   return __sync_lock_test_and_set (b, true);
 }
-
