@@ -20,6 +20,8 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
+#define MAX_CMDS_SIZE 4096
+
 static thread_func start_process NO_RETURN;
 static thread_func start_child_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -53,14 +55,11 @@ process_execute (const char *cmd)
     char *save_ptr;
     cmd_copy = palloc_get_page (0);
     if (cmd_copy == NULL)
-      return TID_ERROR;
-    if (strlen(cmd) > 4000)
-      printf("\nCMD STRING TOO BIG: %s\n", strlen(cmd));
+      return TID_ERROR; /* could return tid from line 43 */
 
     strlcpy (cmd_copy, cmd, PGSIZE);
     
     char *cmd_copy_2 = malloc(strlen(cmd) + 1);
-    printf("\nCOMMAND COPY 2: %s\n", cmd_copy_2);
     strlcpy (cmd_copy_2, cmd, strlen(cmd) + 1);
     char *file_name = strtok_r (cmd_copy_2, " ", &save_ptr);
 
@@ -102,25 +101,32 @@ start_child_process (void *psa_aux)
 static void
 start_process (void* file_name_)
 {
+  //printf ("Starts process\n");
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
 
+  //printf ("START GETTING ARGC\n");
   int argc = get_argc (file_name);
+  //printf ("END GETTING ARGC\n");
 
   /* Tokenize file_name into an array of strings - make some helper function of sort - 
   tokens contains the arguements as its elements*/
   char *tokens[argc];
+  //printf ("TOKENSIZE ARGS START\n");
   tokenize_args (file_name, tokens);
+  //printf ("END TOKENIZE ARGS\n");
 
   /* Check if number of args is a suitable amount (less than some macro) */
   /* If not, then free, and kill */
-  if (calc_total_size(tokens, argc) >= 4000) 
+  if (calc_total_size(tokens, argc) >= MAX_CMDS_SIZE) 
     {
+      printf("NUMBER OF ARGS IS SUITABLEi\n");
       palloc_free_page (file_name);
       thread_exit ();
     }
   
+  printf("NUMBER OF ARGS IS SUITABLE\n");
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
