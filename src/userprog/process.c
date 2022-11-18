@@ -230,12 +230,16 @@ process_exit (void)
           struct fd_to_file_mapping *map = list_entry (list_pop_front (&cur->open_fds), struct fd_to_file_mapping, elem);
           if (map->file_struct != NULL)
             {
+              file_sys_lock_acquire ();
               file_close (map->file_struct);
+              file_sys_lock_release ();
             }
           list_remove (&map->elem);
           free (map);
         }
+      file_sys_lock_acquire ();
       file_close (cur -> exe);
+      file_sys_lock_release ();
 
       sema_up (&cur->wait_handler->wait_sema);
 
@@ -364,18 +368,21 @@ load (const char *file_name, void (**eip) (void), void **esp)
   process_activate ();
 
   /* Open executable file. */
-  lock_acquire (&filesys_lock);
+  file_sys_lock_acquire ();
   file = filesys_open (file_name);
-  lock_release (&filesys_lock);
+  file_sys_lock_release ();
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
-
+  file_sys_lock_acquire ();
   file_deny_write (file);
-  thread_current () -> exe = file;
+  file_sys_lock_release ();
+  t->exe = file;
+  
   /* Read and verify executable header. */
+  file_sys_lock_acquire ();
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
       || memcmp (ehdr.e_ident, "\177ELF\1\1\1", 7)
       || ehdr.e_type != 2
@@ -384,9 +391,11 @@ load (const char *file_name, void (**eip) (void), void **esp)
       || ehdr.e_phentsize != sizeof (struct Elf32_Phdr)
       || ehdr.e_phnum > 1024) 
     {
+      file_sys_lock_release ();
       printf ("load: %s: error loading executable\n", file_name);
       goto done; 
     }
+  file_sys_lock_release ();
 
   /* Read program headers. */
   file_ofs = ehdr.e_phoff;
@@ -394,12 +403,26 @@ load (const char *file_name, void (**eip) (void), void **esp)
     {
       struct Elf32_Phdr phdr;
 
+      file_sys_lock_acquire ();
       if (file_ofs < 0 || file_ofs > file_length (file))
-        goto done;
-      file_seek (file, file_ofs);
+        {
+          file_sys_lock_release ();
+          goto done;
+        }
+      file_sys_lock_release ();
 
+      file_sys_lock_acquire ();
+      file_seek (file, file_ofs);
+      file_sys_lock_release ();
+
+      file_sys_lock_acquire ();
       if (file_read (file, &phdr, sizeof phdr) != sizeof phdr)
-        goto done;
+        {
+          file_sys_lock_release ();
+          goto done;
+        }
+      file_sys_lock_release ();
+
       file_ofs += sizeof phdr;
       switch (phdr.p_type) 
         {
@@ -474,9 +497,14 @@ validate_segment (const struct Elf32_Phdr *phdr, struct file *file)
   if ((phdr->p_offset & PGMASK) != (phdr->p_vaddr & PGMASK)) 
     return false; 
 
+  file_sys_lock_acquire ();
   /* p_offset must point within FILE. */
   if (phdr->p_offset > (Elf32_Off) file_length (file)) 
-    return false;
+    {
+      file_sys_lock_release ();
+      return false;
+    }
+  file_sys_lock_release ();
 
   /* p_memsz must be at least as big as p_filesz. */
   if (phdr->p_memsz < phdr->p_filesz) 
@@ -532,7 +560,9 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (ofs % PGSIZE == 0);
 
+  file_sys_lock_acquire ();
   file_seek (file, ofs);
+  file_sys_lock_release ();
   while (read_bytes > 0 || zero_bytes > 0) 
     {
       /* Calculate how to fill this page.
@@ -570,9 +600,14 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       }
 
       /* Load data into the page. */
-      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes){
-        return false; 
-      }
+      file_sys_lock_acquire ();
+      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
+        {
+          file_sys_lock_release ();
+          return false; 
+        }
+      file_sys_lock_release ();
+
       memset (kpage + page_read_bytes, 0, page_zero_bytes);
 
       /* Advance. */
