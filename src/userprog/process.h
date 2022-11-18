@@ -12,6 +12,7 @@ void process_activate (void);
 
 #define MAX_ARG_LIMIT 140
 #define WORD_SIZE 4
+#define FAKE_ADDRESS 0xD0C0FFEE
 
 /* Process struct */
 struct wait_handler
