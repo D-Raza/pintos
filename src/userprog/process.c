@@ -92,8 +92,10 @@ process_execute (const char *cmd)
             tid = TID_ERROR;
           }
       }
-      
-    // palloc_free_page (cmd_copy);
+    else 
+      {
+        palloc_free_page (cmd_copy);
+      }  
   } 
   return tid;
 }
