@@ -119,6 +119,8 @@ kill (struct intr_frame *f)
 static void
 page_fault (struct intr_frame *f) 
 {
+    /* sets the return address of the frame to the saved eax register
+   and restores the eax value */
   if (thread_current ()->syscall)
     {
       f->eip = (void *) f->eax;
