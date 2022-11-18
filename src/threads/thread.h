@@ -117,6 +117,7 @@ struct thread
     struct list open_fds;		/* List of files opened by the thread */
     int next_free_fd;			/* Next available fd */
     struct file *exe;                   /* Loaded Executable */
+    bool syscall;                       /* Syscall flag for page_fault */
 #endif
 
     /* Owned by thread.c. */
