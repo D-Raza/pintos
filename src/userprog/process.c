@@ -125,12 +125,27 @@ start_process (void *psa_)
 
   /* Check if number of args is a suitable amount (less than some macro) */
   /* If not, then free, and kill */
-  if (calc_total_size(tokens, argc) > MAX_CMDS_SIZE) 
+  if (calc_total_size(tokens, argc) > 1000) 
     {
       palloc_free_page (file_name);
+      /*printf ("FINISH PALLOC\n");
+      struct thread *cur = thread_current ();
+      uint32_t *pd;
+      pd = cur->pagedir;
+      if (pd == NULL){
+	      printf ("PD IS NULL\n");
+      } else {
+	    printf ("PD IS NOT NULL\n");
+      }
+      if (thread_current ()->status == THREAD_RUNNING){
+	      printf ("THIS IS A RUNNING THREAD\n");
+      } else {
+	      printf ("THE STATUS OF THE THREAD IS %s\n", thread_current ()->status);
+      }*/
       thread_exit ();
+      //printf ("FINISHED THREAD_EXIT\n");
     }
-  
+  //printf ("PAST IF \n");
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
