@@ -495,10 +495,12 @@ syscall_handler (struct intr_frame *f)
     [SYS_TELL] = sys_tell,
     [SYS_CLOSE] = sys_close
 
+    /*
     #ifdef VM
     [SYS_MMAP] = sys_mmap,
     [SYS_MUNMAP] = sys_munmap
     #endif
+    */
   };
 
   struct thread* cur = thread_current ();
