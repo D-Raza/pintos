@@ -13,10 +13,8 @@ struct frame_table_entry
     bool evictable;               /* Whether the page is evictable */
 };
 
-/* Frees the frame at kpage */
-static void *frame_get (void);
+/* Initilises the frame table */
+void frame_init (void);
 
-/* Frees the frame at kpage */
-static void frame_free (void *kpage);
 
 #endif /* vm/frame.h */
