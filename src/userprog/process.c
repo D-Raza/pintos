@@ -19,7 +19,7 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
-#include "vm/frame.c"
+#include "vm/frame.h"
 
 #define MAX_CMDS_SIZE 4096
 

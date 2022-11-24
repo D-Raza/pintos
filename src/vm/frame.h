@@ -1,7 +1,14 @@
 #ifndef FRAME_H
 #define FRAME_H
 
-#include "userprog/pagedir.h"
+#include <hash.h>
+#include <list.h>
+#include "vm/frame.h"
+#include "threads/malloc.h"
+#include "threads/palloc.h"
+#include "threads/synch.h"
+#include "threads/thread.h"
+#include "threads/vaddr.h"
 
 struct frame_table_entry
 {
@@ -13,8 +20,10 @@ struct frame_table_entry
     bool evictable;               /* Whether the page is evictable */
 };
 
-/* Initilises the frame table */
+
 void frame_init (void);
+void frame_free (void *kpage);
+void* frame_get (enum palloc_flags f, void *upage);
 
 
 #endif /* vm/frame.h */

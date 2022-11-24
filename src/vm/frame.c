@@ -5,6 +5,7 @@
 #include "threads/palloc.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
+#include "threads/vaddr.h"
 
 
 /* The frame table */
@@ -21,7 +22,6 @@ static struct lock frame_table_lock;
 
 static unsigned frame_hash_hash_func (const struct hash_elem *h, void *aux UNUSED);
 static bool frame_hash_less_func (const struct hash_elem *h1_raw, const struct hash_elem *h2_raw, void *aux UNUSED);
-static void frame_free (void *kpage);
 
 /* Initialises the frame table and associated structs. */
 void
@@ -30,9 +30,11 @@ frame_init (void)
     hash_init (&frame_table, frame_hash_hash_func, frame_hash_less_func, NULL);
     list_init (&used_frames_list);
     lock_init (&frame_table_lock);
+    // examine_ptr = list_begin (&used_frames_list);
+    // reset_ptr = list_begin (&used_frames_list);
 }
 
-static void*
+void*
 frame_get (enum palloc_flags f, void *upage)
 {   
     #ifndef VM
@@ -60,8 +62,9 @@ frame_get (enum palloc_flags f, void *upage)
                 fte->pd = thread_current ()->pagedir;
                 fte->evictable = false;
                 fte->upage = upage;
-                
                 hash_insert (&frame_table, &fte->hash_elem);
+                // list_push_back (&used_frames_list, &fte->list_elem);
+                lock_release (&frame_table_lock);
                 return kpage;
             } 
         else 
@@ -73,7 +76,7 @@ frame_get (enum palloc_flags f, void *upage)
     #endif
 }
 
-static void 
+void 
 frame_free (void *kpage)
 {   
     #ifndef VM
@@ -101,7 +104,8 @@ frame_free (void *kpage)
     
     /* Delete the frame table entry and remove it from the used frames list */
     hash_delete (&frame_table, &fte_actual->hash_elem);
-    list_remove (&fte_actual->list_elem);
+
+    // list_remove (&fte_actual->list_elem);
 
     /* Free the frame */
     free (fte_actual);
@@ -113,16 +117,10 @@ frame_free (void *kpage)
     #endif
 }
 
-
-
-
-
-
 static unsigned 
 frame_hash_hash_func (const struct hash_elem *h, void *aux UNUSED)
 {
     struct frame_table_entry *fte = hash_entry (h, struct frame_table_entry, hash_elem);
-
 }
 
 static bool
@@ -132,5 +130,3 @@ frame_hash_less_func (const struct hash_elem *h1_raw, const struct hash_elem *h2
     struct frame_table_entry *h2 = hash_entry (h2_raw, struct frame_table_entry, hash_elem);
     return h1->kpage < h2->kpage;
 }
-
-
