@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "fixed-point.h"
+#include "vm/page.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -113,10 +114,14 @@ struct thread
     uint32_t *pagedir;                  /* Page directory. */
     struct list child_processes;        /* List of child processes */
     struct wait_handler *wait_handler;  /* Handles the wait/exit status of the child  */
-    struct list open_fds;		/* List of files opened by the thread */
-    int next_free_fd;			/* Next available fd */
+    struct list open_fds;		          /* List of files opened by the thread */
+    int next_free_fd;			          /* Next available fd */
     struct file *exe;                   /* Loaded Executable */
     bool syscall;                       /* Syscall flag for page_fault */
+#endif
+
+#ifdef VM
+    struct sup_page_table *sup_page_table; /* Supplemental page table */
 #endif
 
     /* Owned by thread.c. */
