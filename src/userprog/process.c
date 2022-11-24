@@ -19,6 +19,7 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "vm/frame.c"
 
 #define MAX_CMDS_SIZE 4096
 
@@ -613,7 +614,8 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       if (kpage == NULL){
         
         /* Get a new page of memory. */
-        kpage = palloc_get_page (PAL_USER);
+        // kpage = palloc_get_page (PAL_USER);
+        kpage = frame_get (PAL_USER, upage);
         if (kpage == NULL){
           return false;
         }
@@ -621,7 +623,8 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
         /* Add the page to the process's address space. */
         if (!install_page (upage, kpage, writable)) 
           {
-            palloc_free_page (kpage);
+            // palloc_free_page (kpage);
+            frame_free (kpage);
             return false; 
           }     
         
@@ -662,14 +665,14 @@ setup_stack (void **esp)
   uint8_t *kpage;
   bool success = false;
 
-  kpage = palloc_get_page (PAL_USER | PAL_ZERO);
+  kpage = frame_get (PAL_USER | PAL_ZERO, ((uint8_t *) PHYS_BASE) - PGSIZE);
   if (kpage != NULL) 
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
         *esp = PHYS_BASE;
       else
-        palloc_free_page (kpage);
+        frame_free (kpage);
     }
   return success;
 }

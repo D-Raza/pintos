@@ -34,7 +34,11 @@ frame_init (void)
 
 static void*
 frame_get (enum palloc_flags f, void *upage)
-{
+{   
+    #ifndef VM
+    return palloc_get_page (f);
+    #else
+
     /* Try to get memory page */
     void *kpage = palloc_get_page(PAL_USER);
     
@@ -66,11 +70,16 @@ frame_get (enum palloc_flags f, void *upage)
             return NULL;
           }
       }
+    #endif
 }
 
 static void 
 frame_free (void *kpage)
 {   
+    #ifndef VM
+    palloc_free_page (kpage);
+    #else
+
     lock_acquire (&frame_table_lock);
 
     /* Ensure kpage is valid */
@@ -100,6 +109,8 @@ frame_free (void *kpage)
 
     /* Release the lock */
     lock_release (&frame_table_lock);
+
+    #endif
 }
 
 
