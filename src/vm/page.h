@@ -27,5 +27,6 @@ struct sup_page_table
     struct hash hash_spt_table;           /* The hash table*/
 };
 
+struct sup_page_table *sup_page_table_create (void);
  
 #endif /* vm/page.h */

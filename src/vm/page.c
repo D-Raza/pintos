@@ -1,4 +1,6 @@
 #include "vm/page.h"
+#include "vm/frame.h"
+#include "threads/malloc.h"
 #include <hash.h>
 
 static bool spt_hash_less_func (const struct hash_elem *h1_raw, const struct hash_elem *h2_raw, void *aux);
@@ -22,7 +24,7 @@ sup_page_table_create (void)
 }
 
 static bool 
-spt_hash_less_func (const struct hash_elem *h1_raw, const struct hash_elem *h2_raw, void *aux)
+spt_hash_less_func (const struct hash_elem *h1_raw, const struct hash_elem *h2_raw, void *aux UNUSED)
 {   
     struct sup_page_table_entry *spte1 = hash_entry (h1_raw, struct sup_page_table_entry, hash_elem);
     struct sup_page_table_entry *spte2 = hash_entry (h2_raw, struct sup_page_table_entry, hash_elem);
@@ -30,7 +32,7 @@ spt_hash_less_func (const struct hash_elem *h1_raw, const struct hash_elem *h2_r
 }
 
 static unsigned 
-spt_hash_hash_func (const struct hash_elem *hash_elem, void *aux)
+spt_hash_hash_func (const struct hash_elem *hash_elem, void *aux UNUSED)
 {
     struct sup_page_table_entry *spte = hash_entry (hash_elem, struct sup_page_table_entry, hash_elem);
     return hash_int ((int) spte->upage);

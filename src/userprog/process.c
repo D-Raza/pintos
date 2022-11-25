@@ -20,6 +20,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "vm/frame.h"
+#include "vm/page.h"
 
 #define MAX_CMDS_SIZE 4096
 
@@ -234,6 +235,15 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
+  #ifdef VM
+  /* Free:
+     The supplemental page table
+     The mmap table(?) later
+     All supplemental page table entries
+     All frames held by the process
+  */
+  #endif
+
 
   /* Free all processes in the child_processes list */
   while (!list_empty (&cur->child_processes)) 
@@ -392,6 +402,11 @@ load (const char *file_name, void (**eip) (void), void **esp)
   off_t file_ofs;
   bool success = false;
   int i;
+
+  /* Allocate supplemental page table */
+  #ifdef VM
+  t->sup_page_table = sup_page_table_create ();
+  #endif
 
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
@@ -610,6 +625,26 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       /* Check if virtual page already allocated */
       struct thread *t = thread_current ();
       uint8_t *kpage = pagedir_get_page (t->pagedir, upage);
+
+#ifdef VM
+      /* Lazy loading of page */
+      /* DRAFT: to be encapsulated and finished: */
+     
+      ASSERT (!pagedir_get_page (t->pagedir, upage));
+
+      struct sup_page_table *spt = t->sup_page_table;
+
+      struct sup_page_table_entry *spte = malloc (sizeof (struct sup_page_table_entry));
+      spte->upage = upage;
+      spte->kpage = kpage;
+
+      // spte->type = 
+
+      struct hash_elem *he; 
+      he = hash_insert (&spt->hash_spt_table, &spte->hash_elem);
+      ASSERT (!he);
+      /* END DRAFT */
+#else
       
       if (kpage == NULL){
         
@@ -626,9 +661,9 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
             // palloc_free_page (kpage);
             frame_free (kpage);
             return false; 
-          }     
-        
+          } 
       } 
+
       else 
         {
           /* Check if writable flag for the page should be updated */
@@ -648,6 +683,8 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       file_sys_lock_release ();
 
       memset (kpage + page_read_bytes, 0, page_zero_bytes);
+
+#endif
 
       /* Advance. */
       read_bytes -= page_read_bytes;
