@@ -354,23 +354,36 @@ sys_read (int args[])
   int fd = args[0];
   void *buffer = (void *) args[1];
   unsigned size = (unsigned) args[2];
+  int read_size = 0;
 
   if (fd == STDOUT_FILENO)
     {
       return -1;
     }
-  struct file *fd_file = get_file (fd);
-  if (!fd_file){
-    return -1;
-  }
-  if (!mem_try_write_buffer (buffer, size))
+  if (fd == STDIN_FILENO)
     {
-
-      thread_exit ();
+      file_sys_lock_acquire ();
+      uint8_t *local_buffer = (uint8_t *) buffer;
+      for (int i = 0; i < (int) size; i++){
+        local_buffer[i] = input_getc ();
+      } 
+      file_sys_lock_release ();
+      return size;    
     }
-  file_sys_lock_acquire ();
-  int read_size = file_read (fd_file, buffer, size);
-  file_sys_lock_release ();
+  else 
+    {
+    struct file *fd_file = get_file (fd);
+    if (!fd_file){
+      return -1;
+    }
+    if (!mem_try_write_buffer (buffer, size))
+      {
+        thread_exit ();
+      }
+    file_sys_lock_acquire ();
+    read_size = file_read (fd_file, buffer, size);
+    file_sys_lock_release ();
+  }
   return read_size;
 }
 
