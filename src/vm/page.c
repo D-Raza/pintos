@@ -26,7 +26,7 @@ spt_hash_less_func (const struct hash_elem *h1_raw, const struct hash_elem *h2_r
 {   
     struct sup_page_table_entry *spte1 = hash_entry (h1_raw, struct sup_page_table_entry, hash_elem);
     struct sup_page_table_entry *spte2 = hash_entry (h2_raw, struct sup_page_table_entry, hash_elem);
-    return spte1->upage < spte2->upage; 
+    return (int) spte1->upage < (int) spte2->upage; 
 }
 
 static unsigned 
