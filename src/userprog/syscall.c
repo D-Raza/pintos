@@ -348,7 +348,7 @@ sys_filesize (int args[])
    and returns the number of bytes read into buffer.
    Returns -1 if reading from stdout (fd = 1) or
    if the file pointer is null*/
-static int 
+static int
 sys_read (int args[])
 {
   int fd = args[0];
@@ -359,19 +359,31 @@ sys_read (int args[])
     {
       return -1;
     }
-  struct file *fd_file = get_file (fd);
-  if (!fd_file){
-    return -1;
-  }
-  if (!mem_try_write_buffer (buffer, size))
+  if (fd == STDIN_FILENO)
     {
-
-      thread_exit ();
+      file_sys_lock_acquire ();
+      uint8_t *local_buffer = (uint8_t *) buffer;
+      for (int i = 0; i < (int) size; i++){
+        local_buffer[i] = input_getc ();
+      }
+      file_sys_lock_release ();
+      return size;
     }
-  file_sys_lock_acquire ();
-  int read_size = file_read (fd_file, buffer, size);
-  file_sys_lock_release ();
-  return read_size;
+  else
+    {
+    struct file *fd_file = get_file (fd);
+    if (!fd_file){
+      return -1;
+    }
+    if (!mem_try_write_buffer (buffer, size))
+      {
+        thread_exit ();
+      }
+    file_sys_lock_acquire ();
+    int read_size = file_read (fd_file, buffer, size);
+    file_sys_lock_release ();
+    return read_size;
+  }
 }
 
 /* Writes size bytes from buffer into open file fd
