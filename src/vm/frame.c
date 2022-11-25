@@ -121,6 +121,8 @@ static unsigned
 frame_hash_hash_func (const struct hash_elem *h, void *aux UNUSED)
 {
     struct frame_table_entry *fte = hash_entry (h, struct frame_table_entry, hash_elem);
+    return hash_int ((int) fte->kpage);
+
 }
 
 static bool
