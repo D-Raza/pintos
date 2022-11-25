@@ -59,9 +59,17 @@ frame_get (enum palloc_flags f, void *upage)
         if (fte)
             {
                 fte->kpage = kpage;
-                fte->pd = thread_current ()->pagedir;
-                fte->evictable = false;
                 fte->upage = upage;
+                list_init (&fte->page_table_refs);
+                struct page_table_ref *pgtr = malloc (sizeof (struct page_table_ref));
+                if (!pgtr) {
+                  PANIC ("Malloc failed for page table ref"); /* not sure if we should have this if statement*/
+                }
+                pgtr->pd = thread_current ()->pagedir;
+                //list_entry (pgtr, page_table_ref, page_table_ref);
+                list_push_back (&fte->page_table_refs, pgtr);
+                // fte->pd = thread_current ()->pagedir;
+                fte->evictable = false;
                 hash_insert (&frame_table, &fte->hash_elem);
                 // list_push_back (&used_frames_list, &fte->list_elem);
                 lock_release (&frame_table_lock);
@@ -75,6 +83,8 @@ frame_get (enum palloc_flags f, void *upage)
       }
     #endif
 }
+
+
 
 void 
 frame_free (void *kpage)
@@ -121,6 +131,7 @@ static unsigned
 frame_hash_hash_func (const struct hash_elem *h, void *aux UNUSED)
 {
     struct frame_table_entry *fte = hash_entry (h, struct frame_table_entry, hash_elem);
+    return hash_int ((int) fte->kpage);
 }
 
 static bool
