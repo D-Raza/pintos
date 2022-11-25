@@ -14,7 +14,7 @@ struct frame_table_entry
 {
     void *kpage;                  /* Kernel virtual address of the page */
     void *upage;                  /* User virtual address of the page */   
-    struct list *page_table_refs;  /* User pages that refer to the same frame (aliases) */  
+    struct list page_table_refs;  /* User pages that refer to the same frame (aliases) */  
     struct hash_elem hash_elem;   /* Hash table element */
     struct list_elem list_elem;   /* List element for eviction */
     bool evictable;               /* Whether the frame is evictable */
@@ -29,7 +29,9 @@ struct page_table_ref
 
 void frame_init (void);
 void frame_free (void *kpage);
-void* frame_get (enum palloc_flags f, void *upage);
+
+void* frame_get (enum palloc_flags f);
+void frame_install (enum palloc_flags f, void *upage, bool writable);
 
 
 #endif /* vm/frame.h */
