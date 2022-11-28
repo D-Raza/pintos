@@ -60,6 +60,36 @@ spt_add_exec_page (struct sup_page_table *sp_table, void *upage, bool writable, 
     }
 }
 
+/* Adds a page from frame to the supplementary page table. 
+   Returns true if successful, false otherwise. */
+
+bool 
+spt_add_frame_page (struct sup_page_table *sp_table, void *upage, void *kpage)
+{
+  struct sup_page_table_entry *spt_entry = malloc (sizeof (struct sup_page_table_entry));
+  if (spt_entry)
+    {
+      spt_entry->type = PAGE_FRAME;
+      spt_entry->upage = upage;
+      spt_entry->kpage = kpage;
+
+      struct hash_elem *h = hash_insert (&sp_table->hash_spt_table, &spt_entry->hash_elem);
+      if (!h)
+        {
+          return true;
+        }
+      else 
+        {
+          free (spt_entry);
+          return false;
+        }
+    }
+  else 
+    {
+      return false;
+    }
+}
+
 
 static bool 
 spt_load_exec (struct sup_page_table_entry *spt_entry, void *kpage)

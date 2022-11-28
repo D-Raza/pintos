@@ -40,5 +40,6 @@ struct sup_page_table
 
 struct sup_page_table *sup_page_table_create (void);
 bool spt_add_exec_page (struct sup_page_table *sp_table, void *upage, bool writable, struct file *file, off_t ofs, uint32_t read_bytes, uint32_t zero_bytes);
+bool spt_add_frame_page (struct sup_page_table *sp_table, void *upage, void *page);
  
 #endif /* vm/page.h */
