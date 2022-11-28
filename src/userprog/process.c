@@ -630,20 +630,16 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
 #ifdef VM
       /* Lazy loading of page */
-      /* DRAFT: to be encapsulated and finished: */
      
-      
       /* Ensure that upage is unmapped */
       ASSERT (!pagedir_get_page (t->pagedir, upage));
 
       bool result = spt_add_exec_page (t->sup_page_table, upage, writable, file, ofs, page_read_bytes, page_zero_bytes);
       if (!result)
         {
-          // printf("\nLOAD SEGMENT FAILING");
           return false;
         }
 
-      /* END DRAFT */
 #else
 
       uint8_t *kpage = pagedir_get_page (t->pagedir, upage);
@@ -692,14 +688,18 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
       upage += PGSIZE;
+      #ifdef VM
+      ofs += PGSIZE;
+      #endif
     }
+
   return true;
 }
 
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
 static bool
-setup_stack (void **esp) 
+setup_stack (void **esp)
 {
   uint8_t *kpage;
   bool success = false;
@@ -736,9 +736,7 @@ install_page (void *upage, void *kpage, bool writable)
   bool result = !(pagedir_get_page (pd, upage)) && pagedir_set_page (pd, upage, kpage, writable);
   
   #ifdef VM
-  bool aux =  spt_add_frame_page (t->sup_page_table, upage, kpage);
-  printf("\ninstall page: %d", aux);
-  result &= aux;
+  result &= spt_add_frame_page (t->sup_page_table, upage, kpage);
   #endif
 
   return result;

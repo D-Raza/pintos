@@ -120,14 +120,6 @@ kill (struct intr_frame *f)
 static void
 page_fault (struct intr_frame *f) 
 {
-    /* sets the return address of the frame to the saved eax register
-   and restores the eax value */
-  if (thread_current ()->syscall)
-    {
-      f->eip = (void *) f->eax;
-      f->eax = 0xffffffff;
-      return;
-    }
 
   bool not_present;  /* True: not-present page, false: writing r/o page. */
   bool write;        /* True: access was write, false: access was read. */
@@ -154,19 +146,26 @@ page_fault (struct intr_frame *f)
   not_present = (f->error_code & PF_P) == 0;
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
+  struct thread *t = thread_current ();
 
-  void* fault_addr_rounded = pg_round_down (fault_addr);
-  //printf("\n fault addr rounded: %p", fault_addr_rounded);
-  bool result = spt_load_handler (thread_current ()->sup_page_table, fault_addr_rounded);
-  if (result)
+  #ifdef VM
+  
+  if (spt_load_handler (t->sup_page_table, pg_round_down (fault_addr), t->pagedir))
     {
       return;
     }
-   else
-     {
-      //PANIC ("PAGE FAILED TO LOAD");
-     }
 
+  #endif
+
+   /* sets the return address of the frame to the saved eax register
+   and restores the eax value */
+  if (t->syscall)
+    {
+      f->eip = (void *) f->eax;
+      f->eax = 0xffffffff;
+      return;
+    }
+   
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
      which fault_addr refers. */

@@ -29,7 +29,7 @@ sup_page_table_create (void)
 }
 
 bool 
-spt_load_handler (struct sup_page_table *sp_table, void *fault_addr)
+spt_load_handler (struct sup_page_table *sp_table, void *fault_addr, uint32_t *pd)
 { 
   /* Get the page entry at fault address */
   struct sup_page_table_entry *spt_entry = find_spte (sp_table, fault_addr);
@@ -72,7 +72,7 @@ spt_load_handler (struct sup_page_table *sp_table, void *fault_addr)
       default:
         NOT_REACHED ();
     }
-  if (!pagedir_set_page (thread_current ()->pagedir, fault_addr, kpage, writable))
+  if (!pagedir_set_page (pd, fault_addr, kpage, writable))
     {
       printf("4");
       frame_free (kpage);
@@ -80,7 +80,7 @@ spt_load_handler (struct sup_page_table *sp_table, void *fault_addr)
     }
   spt_entry->type = PAGE_FRAME;
   spt_entry->kpage = kpage;
-  pagedir_set_dirty (thread_current ()->pagedir, fault_addr, false);
+  pagedir_set_dirty (pd, fault_addr, false);
   return true;
 }
 
@@ -172,7 +172,6 @@ find_spte (struct sup_page_table *sp_table, void *upage)
     }
   else 
     {
-      printf("FAILURE TO FIND SPT");
       return NULL;
     }
 }
@@ -191,4 +190,3 @@ spt_hash_hash_func (const struct hash_elem *hash_elem, void *aux UNUSED)
     struct sup_page_table_entry *spte = hash_entry (hash_elem, struct sup_page_table_entry, hash_elem);
     return hash_int ((int) spte->upage);
 }
-
