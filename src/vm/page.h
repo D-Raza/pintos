@@ -18,6 +18,14 @@ struct sup_page_table_entry
     void *upage;                   /* User virtual address */
     void *kpage;                   /* Kernel page (used when type = PAGE_FRAME) */
     struct hash_elem hash_elem;    /* Page table entry */
+
+    /* Members for executable files */
+    uint32_t read_bytes;           /* Number of bytes to read from file */
+    uint32_t zero_bytes;           /* Number of bytes to zero out */
+    bool writable;                 /* Writable page? */
+    struct file *file;             /* File pointer */
+    off_t offset;                  /* Offset */
+
     /* For PAGE_SWAP */
     // TODO:
 };
