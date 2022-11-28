@@ -69,12 +69,13 @@ spt_load_handler (struct sup_page_table *sp_table, void *fault_addr)
       default:
         NOT_REACHED ();
     }
-  if (!pagedir_set_page (thread_current ()->pagedir, fault_addr, kpage, true))
+  if (!pagedir_set_page (thread_current ()->pagedir, fault_addr, kpage, writable))
     {
       frame_free (kpage);
       return false;
     }
   spt_entry->type = PAGE_FRAME;
+  spt_entry->kpage = kpage;
   pagedir_set_dirty (thread_current ()->pagedir, fault_addr, false);
   return true;
 }
