@@ -348,7 +348,7 @@ sys_filesize (int args[])
    and returns the number of bytes read into buffer.
    Returns -1 if reading from stdout (fd = 1) or
    if the file pointer is null*/
-static int 
+static int
 sys_read (int args[])
 {
   int fd = args[0];
@@ -383,8 +383,8 @@ sys_read (int args[])
     file_sys_lock_acquire ();
     read_size = file_read (fd_file, buffer, size);
     file_sys_lock_release ();
-  }
-  return read_size;
+    }
+    return read_size;
 }
 
 /* Writes size bytes from buffer into open file fd
