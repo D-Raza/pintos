@@ -6,6 +6,7 @@
 #include "threads/synch.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "userprog/pagedir.h"
 
 
 /* The frame table */
@@ -34,15 +35,55 @@ frame_init (void)
     // reset_ptr = list_begin (&used_frames_list);
 }
 
+void 
+frame_install (enum palloc_flags f, void *upage, bool writable) {
+  #ifdef VM
+
+  lock_acquire (&frame_table_lock);
+  /* Add entry to the frame table */
+  void *kpage = frame_get (f);
+  struct frame_table_entry *fte = malloc (sizeof (struct frame_table_entry));
+
+  if (fte)
+    {
+      /* Initialise frame table entry */
+      fte->kpage = kpage;
+      fte->upage = upage;
+      list_init (&fte->page_table_refs);
+      fte->evictable = false;
+
+      /* Initialise page_table_ref and add to list */
+      struct page_table_ref *pgtr = malloc (sizeof (struct page_table_ref));
+      if (!pgtr) {
+        PANIC ("Malloc failed for page table ref"); 
+      }
+      pgtr->pd = thread_current ()->pagedir;
+      pgtr->page = pagedir_get_page (pgtr->pd, upage);
+      list_push_back (&fte->page_table_refs, &pgtr->elem);
+
+      /* Add entries to page table and frame table*/
+      pagedir_set_page (pgtr->pd, upage, kpage, writable);
+      hash_insert (&frame_table, &fte->hash_elem);
+      lock_release (&frame_table_lock);
+    } 
+  else 
+    {
+      lock_release (&frame_table_lock);
+      PANIC ("Malloc failed for frame table entry");
+    }
+
+  #endif
+}
+
 void*
-frame_get (enum palloc_flags f, void *upage)
+frame_get (enum palloc_flags f)
 {   
     #ifndef VM
     return palloc_get_page (f);
     #else
 
     /* Try to get memory page */
-    void *kpage = palloc_get_page(PAL_USER);
+    void *kpage = palloc_get_page(PAL_USER | f);
     
     if (kpage == NULL) 
       {
@@ -53,28 +94,12 @@ frame_get (enum palloc_flags f, void *upage)
       }
     else
       {
-        lock_acquire (&frame_table_lock);
-        /* Add entry to the frame table */
-        struct frame_table_entry *fte = malloc (sizeof (struct frame_table_entry));
-        if (fte)
-            {
-                fte->kpage = kpage;
-                fte->pd = thread_current ()->pagedir;
-                fte->evictable = false;
-                fte->upage = upage;
-                hash_insert (&frame_table, &fte->hash_elem);
-                // list_push_back (&used_frames_list, &fte->list_elem);
-                lock_release (&frame_table_lock);
-                return kpage;
-            } 
-        else 
-          {
-            lock_release (&frame_table_lock);
-            return NULL;
-          }
+        return kpage;
       }
     #endif
 }
+
+
 
 void 
 frame_free (void *kpage)
@@ -97,10 +122,19 @@ frame_free (void *kpage)
         PANIC ("Trying to free a frame that is not in the frame table");
     }
 
-    free (&fte);
-
     /* Find the actual frame table entry */
     struct frame_table_entry *fte_actual = hash_entry (hash_elem, struct frame_table_entry, hash_elem);
+    
+    /* Clear the page table entries pointing to the frame and free the structs */
+    struct list *prs = &fte_actual->page_table_refs;
+    while (!list_empty(prs))
+      {
+        struct page_table_ref *pr = list_entry 
+                    (list_pop_front (prs), struct page_table_ref, elem);
+        pagedir_clear_page(pr->pd, pr->page);
+        list_remove (&pr->elem);
+        free (pr);
+      }
     
     /* Delete the frame table entry and remove it from the used frames list */
     hash_delete (&frame_table, &fte_actual->hash_elem);
@@ -122,7 +156,6 @@ frame_hash_hash_func (const struct hash_elem *h, void *aux UNUSED)
 {
     struct frame_table_entry *fte = hash_entry (h, struct frame_table_entry, hash_elem);
     return hash_int ((int) fte->kpage);
-
 }
 
 static bool
