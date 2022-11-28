@@ -139,9 +139,7 @@ frame_free (void *kpage)
             palloc_free_page (kpage);
             free (ft_entry);
           }
-        
       }
-
     /* Release the lock */
     lock_release (&frame_table_lock);
     #endif

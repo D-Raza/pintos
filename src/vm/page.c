@@ -10,6 +10,7 @@ static bool spt_hash_less_func (const struct hash_elem *h1_raw, const struct has
 static unsigned spt_hash_hash_func (const struct hash_elem *hash_elem, void *aux);
 static struct sup_page_table_entry *find_spte (struct sup_page_table *sp_table, void *upage);
 static bool spt_load_exec (struct sup_page_table_entry *spt_entry, void *kpage);
+static void free_spt_entry (struct hash_elem *he, void *aux UNUSED);
 
 /* Creates a supplementary page table. */
 struct sup_page_table*
@@ -59,7 +60,6 @@ spt_load_handler (struct sup_page_table *sp_table, void *fault_addr, uint32_t *p
       case PAGE_EXEC:
         if (!spt_load_exec (spt_entry, kpage))
           {
-            printf("3");
             frame_free (kpage);
             return false;
           }
@@ -74,7 +74,6 @@ spt_load_handler (struct sup_page_table *sp_table, void *fault_addr, uint32_t *p
     }
   if (!pagedir_set_page (pd, fault_addr, kpage, writable))
     {
-      printf("4");
       frame_free (kpage);
       return false;
     }
@@ -144,6 +143,47 @@ spt_add_frame_page (struct sup_page_table *sp_table, void *upage, void *kpage)
   else 
     {
       return false;
+    }
+}
+
+/* Frees a supplemental page table. */
+void
+free_sp_table (struct sup_page_table *sp_table)
+{
+  if (sp_table)
+    {
+      hash_destroy (&sp_table->hash_spt_table, free_spt_entry);
+      free (sp_table);
+    }
+}
+
+/* Frees a supplemental page table entry. */
+static void
+free_spt_entry (struct hash_elem *he, void *aux UNUSED)
+{
+  struct sup_page_table_entry *spt_entry = hash_entry (he, struct sup_page_table_entry, hash_elem);
+  if (spt_entry)
+    {
+      switch (spt_entry->type)
+        {
+          case PAGE_ALL_ZERO:
+            break;
+          case PAGE_SWAP:
+            break;
+          case PAGE_EXEC:
+            break;
+          case PAGE_MMAP:
+            break;
+          case PAGE_FRAME:
+            if (spt_entry->kpage)
+              {
+                frame_free (spt_entry->kpage);
+              }
+            break;
+          default:
+            NOT_REACHED ();
+        }
+      free (spt_entry);
     }
 }
 
