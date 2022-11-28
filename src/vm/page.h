@@ -2,6 +2,7 @@
 #define PAGE_H
 
 #include <hash.h>
+#include "filesys/off_t.h"
 
 enum page_type
   {
