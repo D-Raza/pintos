@@ -1,6 +1,7 @@
 #include "vm/page.h"
 #include "vm/frame.h"
 #include "threads/malloc.h"
+#include "userprog/pagedir.h"
 #include <hash.h>
 #include <string.h>
 
@@ -26,9 +27,60 @@ sup_page_table_create (void)
       }
 }
 
+bool 
+spt_load_handler (struct sup_page_table *sp_table, void *fault_addr)
+{ 
+  /* Get the page entry at fault address */
+  struct sup_page_table_entry *spt_entry = find_spte (sp_table, fault_addr);
+  if (!spt_entry) 
+    {
+      return false;
+    }
+  
+   /* Get a frame for the page */
+  void *kpage = frame_get (PAL_USER);
+  if (!kpage)
+    {
+      return false;
+    }
+  
+  /* Load the page into the frame */
+  bool writable = true;
+  switch (spt_entry->type)
+    {
+      case PAGE_ALL_ZERO:
+        PANIC ("PAGE_ALL_ZERO not implemented");
+        break;
+      case PAGE_SWAP:
+        PANIC ("PAGE_SWAP not implemented");
+        break;
+      case PAGE_EXEC:
+        if (!spt_load_exec (spt_entry, kpage))
+          {
+            frame_free (kpage);
+            return false;
+          }
+        writable = spt_entry->writable;
+        break;
+      case PAGE_MMAP:
+        PANIC ("PAGE_MMAPP not implemented");
+      case PAGE_FRAME:
+        break;
+      default:
+        NOT_REACHED ();
+    }
+  if (!pagedir_set_page (thread_current ()->pagedir, fault_addr, kpage, true))
+    {
+      frame_free (kpage);
+      return false;
+    }
+  spt_entry->type = PAGE_FRAME;
+  pagedir_set_dirty (thread_current ()->pagedir, fault_addr, false);
+  return true;
+}
+
 /* Adds a page from an executable file to the supplementary page table. 
    Returns true if successful, false otherwise. */
-
 bool 
 spt_add_exec_page (struct sup_page_table *sp_table, void *upage, bool writable, struct file *file, off_t ofs, uint32_t read_bytes, uint32_t zero_bytes)
 {
@@ -89,7 +141,6 @@ spt_add_frame_page (struct sup_page_table *sp_table, void *upage, void *kpage)
       return false;
     }
 }
-
 
 static bool 
 spt_load_exec (struct sup_page_table_entry *spt_entry, void *kpage)
