@@ -293,7 +293,6 @@ process_exit (void)
       file_close (cur -> exe);
       file_sys_lock_release ();
 
-
       /* Correct ordering here is crucial.  We must set
          cur->pagedir to NULL before switching page directories,
          so that a timer interrupt can't switch back to the

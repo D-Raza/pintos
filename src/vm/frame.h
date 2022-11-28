@@ -31,7 +31,7 @@ void frame_init (void);
 void frame_free (void *kpage);
 
 void* frame_get (enum palloc_flags f);
-void frame_install (enum palloc_flags f, void *upage, bool writable);
+void frame_install (void *kpage, void *upage);
 
 
 #endif /* vm/frame.h */

@@ -37,12 +37,13 @@ frame_init (void)
 }
 
 void 
-frame_install (enum palloc_flags f, void *upage, bool writable) {
+frame_install (void *kpage, void *upage)
+{
   #ifdef VM
 
   lock_acquire (&frame_table_lock);
   /* Add entry to the frame table */
-  void *kpage = frame_get (f);
+  // void *kpage = frame_get (f);
   struct frame_table_entry *fte = malloc (sizeof (struct frame_table_entry));
 
   if (fte)
@@ -59,11 +60,11 @@ frame_install (enum palloc_flags f, void *upage, bool writable) {
         PANIC ("Malloc failed for page table ref"); 
       }
       pgtr->pd = thread_current ()->pagedir;
-      pgtr->page = pagedir_get_page (pgtr->pd, upage);
+      pgtr->page = upage;
       list_push_back (&fte->page_table_refs, &pgtr->elem);
 
       /* Add entries to page table and frame table*/
-      pagedir_set_page (pgtr->pd, upage, kpage, writable);
+      // pagedir_set_page (pgtr->pd, upage, kpage, writable);
       hash_insert (&frame_table, &fte->hash_elem);
       lock_release (&frame_table_lock);
     } 
@@ -132,7 +133,7 @@ frame_free (void *kpage)
                       (list_pop_front (prs), struct page_table_ref, elem);
                   pagedir_clear_page(pr->pd, pr->page);
                   list_remove (&pr->elem);
-                  free (prs);
+                  free (pr);
                }
            
             // list_remove (&fte_actual->list_elem); 
