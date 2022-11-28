@@ -19,6 +19,8 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "vm/frame.h"
+#include "vm/page.h"
 
 #define MAX_CMDS_SIZE 4096
 
@@ -233,6 +235,18 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
+  #ifdef VM
+  /* Free:
+     The supplemental page table
+     The mmap table(?) later
+     All supplemental page table entries
+     All frames held by the process
+
+    //hash_destroy (cur->sup_page_table, spt_destroy);
+    //free (cur->sup_page_table);
+  */
+  #endif
+
 
   /* Free all processes in the child_processes list */
   while (!list_empty (&cur->child_processes)) 
@@ -391,6 +405,11 @@ load (const char *file_name, void (**eip) (void), void **esp)
   off_t file_ofs;
   bool success = false;
   int i;
+
+  /* Allocate supplemental page table */
+  #ifdef VM
+  t->sup_page_table = sup_page_table_create ();
+  #endif
 
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
@@ -608,12 +627,32 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       
       /* Check if virtual page already allocated */
       struct thread *t = thread_current ();
+
+#ifdef VM
+      /* Lazy loading of page */
+      /* DRAFT: to be encapsulated and finished: */
+     
+      
+      /* Ensure that upage is unmapped */
+      ASSERT (!pagedir_get_page (t->pagedir, upage));
+
+      bool result = spt_add_exec_page (t->sup_page_table, upage, writable, file, ofs, page_read_bytes, page_zero_bytes);
+      if (!result)
+        {
+          // printf("\nLOAD SEGMENT FAILING");
+          return false;
+        }
+
+      /* END DRAFT */
+#else
+
       uint8_t *kpage = pagedir_get_page (t->pagedir, upage);
       
       if (kpage == NULL){
         
         /* Get a new page of memory. */
-        kpage = palloc_get_page (PAL_USER);
+        // kpage = palloc_get_page (PAL_USER);
+        kpage = frame_get (PAL_USER);
         if (kpage == NULL){
           return false;
         }
@@ -621,11 +660,12 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
         /* Add the page to the process's address space. */
         if (!install_page (upage, kpage, writable)) 
           {
-            palloc_free_page (kpage);
+            // palloc_free_page (kpage);
+            frame_free (kpage);
             return false; 
-          }     
-        
+          } 
       } 
+
       else 
         {
           /* Check if writable flag for the page should be updated */
@@ -646,6 +686,8 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
       memset (kpage + page_read_bytes, 0, page_zero_bytes);
 
+#endif
+
       /* Advance. */
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
@@ -662,14 +704,14 @@ setup_stack (void **esp)
   uint8_t *kpage;
   bool success = false;
 
-  kpage = palloc_get_page (PAL_USER | PAL_ZERO);
+  kpage = frame_get (PAL_USER | PAL_ZERO);
   if (kpage != NULL) 
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
         *esp = PHYS_BASE;
       else
-        palloc_free_page (kpage);
+        frame_free (kpage);
     }
   return success;
 }
@@ -687,11 +729,19 @@ static bool
 install_page (void *upage, void *kpage, bool writable)
 {
   struct thread *t = thread_current ();
+  uint32_t *pd = t->pagedir;
 
   /* Verify that there's not already a page at that virtual
      address, then map our page there. */
-  return (pagedir_get_page (t->pagedir, upage) == NULL
-          && pagedir_set_page (t->pagedir, upage, kpage, writable));
+  bool result = !(pagedir_get_page (pd, upage)) && pagedir_set_page (pd, upage, kpage, writable);
+  
+  #ifdef VM
+  bool aux =  spt_add_frame_page (t->sup_page_table, upage, kpage);
+  printf("\ninstall page: %d", aux);
+  result &= aux;
+  #endif
+
+  return result;
 }
 
 /* Tokenizes the args into the array argv */

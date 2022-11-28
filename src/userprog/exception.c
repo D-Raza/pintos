@@ -4,6 +4,7 @@
 #include "userprog/gdt.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/vaddr.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -153,6 +154,18 @@ page_fault (struct intr_frame *f)
   not_present = (f->error_code & PF_P) == 0;
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
+
+  void* fault_addr_rounded = pg_round_down (fault_addr);
+  //printf("\n fault addr rounded: %p", fault_addr_rounded);
+  bool result = spt_load_handler (thread_current ()->sup_page_table, fault_addr_rounded);
+  if (result)
+    {
+      return;
+    }
+   else
+     {
+      //PANIC ("PAGE FAILED TO LOAD");
+     }
 
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
