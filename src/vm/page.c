@@ -4,6 +4,7 @@
 #include "userprog/pagedir.h"
 #include <hash.h>
 #include <string.h>
+#include <stdio.h>
 
 static bool spt_hash_less_func (const struct hash_elem *h1_raw, const struct hash_elem *h2_raw, void *aux);
 static unsigned spt_hash_hash_func (const struct hash_elem *hash_elem, void *aux);
@@ -41,6 +42,7 @@ spt_load_handler (struct sup_page_table *sp_table, void *fault_addr)
   void *kpage = frame_get (PAL_USER);
   if (!kpage)
     {
+      printf("2");
       return false;
     }
   
@@ -57,6 +59,7 @@ spt_load_handler (struct sup_page_table *sp_table, void *fault_addr)
       case PAGE_EXEC:
         if (!spt_load_exec (spt_entry, kpage))
           {
+            printf("3");
             frame_free (kpage);
             return false;
           }
@@ -71,6 +74,7 @@ spt_load_handler (struct sup_page_table *sp_table, void *fault_addr)
     }
   if (!pagedir_set_page (thread_current ()->pagedir, fault_addr, kpage, writable))
     {
+      printf("4");
       frame_free (kpage);
       return false;
     }
@@ -158,9 +162,8 @@ spt_load_exec (struct sup_page_table_entry *spt_entry, void *kpage)
 static struct sup_page_table_entry*
 find_spte (struct sup_page_table *sp_table, void *upage)
 {
-  struct sup_page_table_entry spte_aux;
-  spte_aux.upage = upage;
-  struct hash_elem *h = hash_find (&sp_table->hash_spt_table, &spte_aux.hash_elem);
+  struct sup_page_table_entry spte_aux = {.upage = upage};
+  struct hash_elem *h = hash_find (&(sp_table->hash_spt_table), &(spte_aux.hash_elem));
   
   /* If the entry is found, return it, otherwise return NULL */
   if (h)
@@ -169,6 +172,7 @@ find_spte (struct sup_page_table *sp_table, void *upage)
     }
   else 
     {
+      printf("FAILURE TO FIND SPT");
       return NULL;
     }
 }
@@ -178,7 +182,7 @@ spt_hash_less_func (const struct hash_elem *h1_raw, const struct hash_elem *h2_r
 {   
     struct sup_page_table_entry *spte1 = hash_entry (h1_raw, struct sup_page_table_entry, hash_elem);
     struct sup_page_table_entry *spte2 = hash_entry (h2_raw, struct sup_page_table_entry, hash_elem);
-    return (int) spte1->upage < (int) spte2->upage; 
+    return (int) spte1->upage < (int) spte2->upage;
 }
 
 static unsigned 
@@ -186,6 +190,5 @@ spt_hash_hash_func (const struct hash_elem *hash_elem, void *aux UNUSED)
 {
     struct sup_page_table_entry *spte = hash_entry (hash_elem, struct sup_page_table_entry, hash_elem);
     return hash_int ((int) spte->upage);
-    
 }
 

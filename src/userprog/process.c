@@ -241,6 +241,9 @@ process_exit (void)
      The mmap table(?) later
      All supplemental page table entries
      All frames held by the process
+
+    //hash_destroy (cur->sup_page_table, spt_destroy);
+    //free (cur->sup_page_table);
   */
   #endif
 
@@ -624,27 +627,26 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       
       /* Check if virtual page already allocated */
       struct thread *t = thread_current ();
-      uint8_t *kpage = pagedir_get_page (t->pagedir, upage);
 
 #ifdef VM
       /* Lazy loading of page */
       /* DRAFT: to be encapsulated and finished: */
      
+      
+      /* Ensure that upage is unmapped */
       ASSERT (!pagedir_get_page (t->pagedir, upage));
 
-      struct sup_page_table *spt = t->sup_page_table;
+      bool result = spt_add_exec_page (t->sup_page_table, upage, writable, file, ofs, page_read_bytes, page_zero_bytes);
+      if (!result)
+        {
+          // printf("\nLOAD SEGMENT FAILING");
+          return false;
+        }
 
-      struct sup_page_table_entry *spte = malloc (sizeof (struct sup_page_table_entry));
-      spte->upage = upage;
-      spte->kpage = kpage;
-
-      // spte->type = 
-
-      struct hash_elem *he; 
-      he = hash_insert (&spt->hash_spt_table, &spte->hash_elem);
-      ASSERT (!he);
       /* END DRAFT */
 #else
+
+      uint8_t *kpage = pagedir_get_page (t->pagedir, upage);
       
       if (kpage == NULL){
         
@@ -727,11 +729,19 @@ static bool
 install_page (void *upage, void *kpage, bool writable)
 {
   struct thread *t = thread_current ();
+  uint32_t *pd = t->pagedir;
 
   /* Verify that there's not already a page at that virtual
      address, then map our page there. */
-  return (pagedir_get_page (t->pagedir, upage) == NULL
-          && pagedir_set_page (t->pagedir, upage, kpage, writable));
+  bool result = !(pagedir_get_page (pd, upage)) && pagedir_set_page (pd, upage, kpage, writable);
+  
+  #ifdef VM
+  bool aux =  spt_add_frame_page (t->sup_page_table, upage, kpage);
+  printf("\ninstall page: %d", aux);
+  result &= aux;
+  #endif
+
+  return result;
 }
 
 /* Tokenizes the args into the array argv */
