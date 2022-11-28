@@ -23,6 +23,7 @@ static struct lock frame_table_lock;
 
 static unsigned frame_hash_hash_func (const struct hash_elem *h, void *aux UNUSED);
 static bool frame_hash_less_func (const struct hash_elem *h1_raw, const struct hash_elem *h2_raw, void *aux UNUSED);
+static struct frame_table_entry* find_frame (void *kpage);
 
 /* Initialises the frame table and associated structs. */
 void
@@ -114,41 +115,51 @@ frame_free (void *kpage)
     ASSERT (kpage != NULL);
     ASSERT (is_kernel_vaddr (kpage));
 
-    /* Initialise a hash elem to lookup in frame table */
-    struct frame_table_entry fte = {.kpage = kpage};
-    struct hash_elem *hash_elem = hash_find (&frame_table, &fte.hash_elem);
+    /* Find frame table entry */
+    struct frame_table_entry *ft_entry = find_frame (kpage);
 
-    if (!hash_elem) {
-        PANIC ("Trying to free a frame that is not in the frame table");
-    }
-
-    /* Find the actual frame table entry */
-    struct frame_table_entry *fte_actual = hash_entry (hash_elem, struct frame_table_entry, hash_elem);
-    
-    /* Clear the page table entries pointing to the frame and free the structs */
-    struct list *prs = &fte_actual->page_table_refs;
-    while (!list_empty(prs))
+    if (ft_entry)
       {
-        struct page_table_ref *pr = list_entry 
-                    (list_pop_front (prs), struct page_table_ref, elem);
-        pagedir_clear_page(pr->pd, pr->page);
-        list_remove (&pr->elem);
-        free (pr);
+        /* Delete the entry from the frame table */
+        struct hash_elem *he = hash_delete (&frame_table, &ft_entry->hash_elem);
+        if (he)
+          {
+            /* Clear the page table entries pointing to the frame and free the structs */
+            struct list *prs = &ft_entry->page_table_refs;
+             while (!list_empty(prs))
+               {
+                 struct page_table_ref *pr = list_entry 
+                      (list_pop_front (prs), struct page_table_ref, elem);
+                  pagedir_clear_page(pr->pd, pr->page);
+                  list_remove (&pr->elem);
+                  free (prs);
+               }
+           
+            // list_remove (&fte_actual->list_elem); 
+            palloc_free_page (kpage);
+            free (ft_entry);
+          }
+        
       }
-    
-    /* Delete the frame table entry and remove it from the used frames list */
-    hash_delete (&frame_table, &fte_actual->hash_elem);
-
-    // list_remove (&fte_actual->list_elem);
-
-    /* Free the frame */
-    free (fte_actual);
-    palloc_free_page (kpage);
 
     /* Release the lock */
     lock_release (&frame_table_lock);
-
     #endif
+}
+
+static struct frame_table_entry*
+find_frame (void *kpage)
+{
+  struct frame_table_entry fte_aux = {.kpage = kpage};
+  struct hash_elem *he = hash_find (&frame_table, &fte_aux.hash_elem);
+  if (he)
+    {
+      return hash_entry (he, struct frame_table_entry, hash_elem);
+    }
+  else 
+    {
+      return NULL;
+    }
 }
 
 static unsigned 
