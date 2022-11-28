@@ -241,10 +241,10 @@ process_exit (void)
      The mmap table(?) later
      All supplemental page table entries
      All frames held by the process
-
-    //hash_destroy (cur->sup_page_table, spt_destroy);
-    //free (cur->sup_page_table);
   */
+
+  /* Free the supplemental page table and all frames held by the process */
+  free_sp_table (cur->sup_page_table);
   #endif
 
 
