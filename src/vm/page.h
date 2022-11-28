@@ -3,6 +3,8 @@
 
 #include <hash.h>
 #include "filesys/off_t.h"
+#include "filesys/file.h"
+
 
 enum page_type
   {

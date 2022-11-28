@@ -2,10 +2,12 @@
 #include "vm/frame.h"
 #include "threads/malloc.h"
 #include <hash.h>
+#include <string.h>
 
 static bool spt_hash_less_func (const struct hash_elem *h1_raw, const struct hash_elem *h2_raw, void *aux);
 static unsigned spt_hash_hash_func (const struct hash_elem *hash_elem, void *aux);
 static struct sup_page_table_entry *find_spte (struct sup_page_table *sp_table, void *upage);
+static bool spt_load_exec (struct sup_page_table_entry *spt_entry, void *kpage);
 
 /* Creates a supplementary page table. */
 struct sup_page_table*
@@ -25,20 +27,18 @@ sup_page_table_create (void)
 }
 
 static bool 
-spt_hash_less_func (const struct hash_elem *h1_raw, const struct hash_elem *h2_raw, void *aux UNUSED)
-{   
-    struct sup_page_table_entry *spte1 = hash_entry (h1_raw, struct sup_page_table_entry, hash_elem);
-    struct sup_page_table_entry *spte2 = hash_entry (h2_raw, struct sup_page_table_entry, hash_elem);
-    return (int) spte1->upage < (int) spte2->upage; 
+spt_load_exec (struct sup_page_table_entry *spt_entry, void *kpage)
+{
+  file_seek (spt_entry->file, spt_entry->offset);
+  if (file_read (spt_entry->file, kpage, spt_entry->read_bytes) != (int) spt_entry->read_bytes)
+     {
+       return false;
+     }
+  memset (kpage + spt_entry->read_bytes, 0, spt_entry->zero_bytes);
+  return true;
 }
 
-static unsigned 
-spt_hash_hash_func (const struct hash_elem *hash_elem, void *aux UNUSED)
-{
-    struct sup_page_table_entry *spte = hash_entry (hash_elem, struct sup_page_table_entry, hash_elem);
-    return hash_int ((int) spte->upage);
-    
-}
+
 
 static struct sup_page_table_entry*
 find_spte (struct sup_page_table *sp_table, void *upage)
@@ -56,5 +56,21 @@ find_spte (struct sup_page_table *sp_table, void *upage)
     {
       return NULL;
     }
+}
+
+static bool 
+spt_hash_less_func (const struct hash_elem *h1_raw, const struct hash_elem *h2_raw, void *aux UNUSED)
+{   
+    struct sup_page_table_entry *spte1 = hash_entry (h1_raw, struct sup_page_table_entry, hash_elem);
+    struct sup_page_table_entry *spte2 = hash_entry (h2_raw, struct sup_page_table_entry, hash_elem);
+    return (int) spte1->upage < (int) spte2->upage; 
+}
+
+static unsigned 
+spt_hash_hash_func (const struct hash_elem *hash_elem, void *aux UNUSED)
+{
+    struct sup_page_table_entry *spte = hash_entry (hash_elem, struct sup_page_table_entry, hash_elem);
+    return hash_int ((int) spte->upage);
+    
 }
 
