@@ -39,6 +39,8 @@ static int sys_write (int args[]);
 static int sys_seek (int args[]);
 static int sys_tell (int args[]);
 static int sys_close (int args[]);
+static int sys_mmap (int args[]);
+static int sys_munmap (int args[]);
 
 
 void
@@ -486,6 +488,41 @@ sys_close (int args[])
   return 0;
 }
 
+#ifdef VM
+/*  Maps the file open as fd into the process's consecutive 
+    virtual memory pages starting at addr */
+static int 
+sys_mmap (int args[])
+{
+  int fd = args[0];
+  void *addr = args[1];
+
+  /* Validate arguments */
+
+  /* Record mapping */
+
+  /* Make entries in SPT */
+
+  /* TODO: mapID*/
+  return 1;
+}
+
+/* Unmaps the mapping designated by mapping */
+static int
+sys_munmap (int args[])
+{
+  mapid_t mapping = args[0];
+
+  /* Find mapping struct */
+
+  /* Remove corresponding entries - save if dirty */
+
+  /* Remove mapping struct */
+
+  return 0;
+}
+#endif
+
 /* Calls system calls by using an array of function pointers to them and maps 
    syscall number to the appropriate function and number of arguments.
    If esp cannot be read or the syscall number is not valid, thread_exit is called.  */
@@ -508,12 +545,11 @@ syscall_handler (struct intr_frame *f)
     [SYS_TELL] = sys_tell,
     [SYS_CLOSE] = sys_close
 
-    /*
     #ifdef VM
+    ,
     [SYS_MMAP] = sys_mmap,
     [SYS_MUNMAP] = sys_munmap
     #endif
-    */
   };
 
   struct thread* cur = thread_current ();
