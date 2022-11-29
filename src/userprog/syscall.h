@@ -16,4 +16,12 @@ void syscall_init (void);
 void file_sys_lock_acquire (void); /* used to acquire file_sys_lock*/
 void file_sys_lock_release (void); /* used to release file_sys_lock */
 
+#ifdef VM
+struct mmap_file {
+  int mapId;                       /* mapID */
+  void *first_upage;               /* start of virtual memory range allocated to the file */
+  void *last_upage;                /* end of virtual memory range allocated to the file */
+};
+#endif
+
 #endif /* userprog/syscall.h */

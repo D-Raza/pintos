@@ -491,6 +491,16 @@ sys_close (int args[])
 }
 
 #ifdef VM
+
+/* Returns value of the next mapId available to use 
+and sets it in the thread struct*/
+static int get_new_mapId (void)
+{
+  thread_current () -> next_free_mapId++;
+  return thread_current () ->next_free_mapId;
+}
+
+
 /*  Maps the file open as fd into the process's consecutive 
     virtual memory pages starting at addr */
 static int 
@@ -498,7 +508,7 @@ sys_mmap (int args[])
 {
   int fd = args[0];
   void *addr = args[1];
-
+  void *last_addr;
   /* Validate fd and file */
   struct file *fd_file = get_file (fd);
   if (fd_file == NULL)
@@ -517,7 +527,7 @@ sys_mmap (int args[])
   {
     return MAPID_ERROR;
   } else {
-    void *last_addr = pg_round_down (addr + file_size - 1);
+    last_addr = pg_round_down (addr + file_size - 1);
     // TODO: validate last page not in stackspace
     struct sup_page_table *spt = thread_current ()->sup_page_table;
     for (void * i = addr; i <= last_addr; i += PGSIZE)
@@ -534,20 +544,34 @@ sys_mmap (int args[])
   /* Make entries in SPT */
   void *upage = addr;
   int ofs = 0;
+  bool success = true;
   while (file_size > 0)
   {
     size_t page_read_bytes = file_size < PGSIZE ? file_size : PGSIZE;
     size_t page_zero_bytes = PGSIZE - page_read_bytes;
    
-    bool result = spt_add_mmap_page (thread_current ()->sup_page_table, upage, true, fd_file, ofs, page_read_bytes, page_zero_bytes);
+    success &= spt_add_mmap_page (thread_current ()->sup_page_table, upage, true, fd_file, ofs, page_read_bytes, page_zero_bytes);
     upage =+ PGSIZE;
     ofs =+ PGSIZE;
     file_size -= PGSIZE;
   } 
+  if (!success)
+  {
+    //TODO Add sufficient clean up
+    return MAPID_ERROR;
+  }
   /* Record mapping */
+  struct mmap_file *mapping = malloc (sizeof (struct mmap_file));
+  if (mapping == NULL)
+  {
+    thread_exit ();
+  }
+  int mapId = get_new_mapId ();
+  mapping->mapId = mapId;
+  mapping->first_upage = addr;
+  mapping->last_upage = last_addr;
 
-  /* TODO: mapID*/
-  return 1;
+  return mapId;
 }
 
 /* Unmaps the mapping designated by mapping */

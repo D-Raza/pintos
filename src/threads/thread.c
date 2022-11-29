@@ -580,6 +580,9 @@ init_thread (struct thread *t, const char *name, int priority)
   t->next_free_fd = 1;
   t->syscall = false;
 #endif
+#ifdef VM
+  t->next_free_mapId = 0;
+#endif
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
