@@ -17,6 +17,8 @@
 #include <string.h>
 #include <debug.h>
 
+#define MAPID_ERROR -1
+
 static void syscall_handler (struct intr_frame *);
 static bool validate_string (const char *str);
 static int get_user (const uint8_t *uaddr);
@@ -497,8 +499,38 @@ sys_mmap (int args[])
   int fd = args[0];
   void *addr = args[1];
 
-  /* Validate arguments */
+  /* Validate fd and file */
+  struct file *fd_file = get_file (fd);
+  if (fd_file == NULL)
+  {
+    return MAPID_ERROR;
+  } 
+  file_sys_lock_acquire ();
+  int file_size = file_length (fd_file);
+  file_sys_lock_release ();
+  if (file_size == 0)
+  {
+    return MAPID_ERROR;
+  }
+  /* Validate addr: not 0, page-aligned and clear range*/
+  if (addr == NULL || ((int) addr & 0x7) != 0)
+  {
+    return MAPID_ERROR;
+  } else {
+    void *last_addr = pg_round_down (addr + file_size - 1);
+    // TODO: validate last page not in stackspace
+    struct sup_page_table *spt = thread_current ()->sup_page_table;
+    for (void * i = addr; i <= last_addr; i += PGSIZE)
+    {
+      struct sup_page_table_entry spte_aux = {.upage = i};
 
+      if (hash_find (&spt->hash_spt_table, &spte_aux.hash_elem)!= NULL)
+      {
+        return MAPID_ERROR;
+      }
+    }
+  }
+  
   /* Record mapping */
 
   /* Make entries in SPT */
@@ -551,6 +583,12 @@ syscall_handler (struct intr_frame *f)
     [SYS_MUNMAP] = sys_munmap
     #endif
   };
+  
+  #ifdef VM
+  int max_sys_call_no = SYS_MUNMAP;
+  #else
+  int max_sys_call_no = SYS_MUNMAP;
+  #endif
 
   struct thread* cur = thread_current ();
   cur->syscall = true;
@@ -560,7 +598,8 @@ syscall_handler (struct intr_frame *f)
       thread_exit ();
     }
   int syscall_no = * (int *) f->esp;
-  if (syscall_no >= 0 && syscall_no <= SYS_CLOSE)
+   
+  if (syscall_no >= 0 && syscall_no <= max_sys_call_no)
     {
       int *args = f->esp + 4;
       f->eax = (sys_functions[syscall_no])(args);
