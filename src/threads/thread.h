@@ -122,6 +122,7 @@ struct thread
 
 #ifdef VM
     struct sup_page_table *sup_page_table; /* Supplemental page table */
+    void* user_esp;                        /* User program stack pointer */
 #endif
 
     /* Owned by thread.c. */
