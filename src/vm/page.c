@@ -66,7 +66,12 @@ spt_load_handler (struct sup_page_table *sp_table, void *fault_addr, uint32_t *p
         writable = spt_entry->writable;
         break;
       case PAGE_MMAP:
-        PANIC ("PAGE_MMAPP not implemented");
+        if (!spt_load_exec (spt_entry, kpage))
+          {
+            frame_free (kpage);
+            return false;
+	  }
+	break;
       case PAGE_FRAME:
         break;
       default:
@@ -116,6 +121,39 @@ spt_add_exec_page (struct sup_page_table *sp_table, void *upage, bool writable, 
       return false;
     }
 }
+
+
+bool
+spt_add_mmap_page (struct sup_page_table *sp_table, void *upage, bool writable, struct file *file, off_t ofs, uint32_t read_bytes, uint32_t zero_bytes)
+{
+  struct sup_page_table_entry *spt_entry = malloc (sizeof (struct sup_page_table_entry));
+  if (spt_entry)
+    {
+      spt_entry->type = PAGE_MMAP;
+      spt_entry->upage = upage;
+      spt_entry->file = file;
+      spt_entry->offset = ofs;
+      spt_entry->read_bytes = read_bytes;
+      spt_entry->zero_bytes = zero_bytes;
+      spt_entry->writable = writable;
+
+      struct hash_elem *h = hash_insert (&sp_table->hash_spt_table, &spt_entry->hash_elem);
+      if (!h)
+        {
+          return true;
+        }
+      else
+        {
+          free (spt_entry);
+          return false;
+        }
+    }
+  else
+    {
+      return false;
+    }
+}
+
 
 /* Adds a page from frame to the supplementary page table. 
    Returns true if successful, false otherwise. */

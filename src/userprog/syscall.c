@@ -530,10 +530,21 @@ sys_mmap (int args[])
       }
     }
   }
-  
-  /* Record mapping */
 
   /* Make entries in SPT */
+  void *upage = addr;
+  int ofs = 0;
+  while (file_size > 0)
+  {
+    size_t page_read_bytes = file_size < PGSIZE ? file_size : PGSIZE;
+    size_t page_zero_bytes = PGSIZE - page_read_bytes;
+   
+    bool result = spt_add_mmap_page (thread_current ()->sup_page_table, upage, true, fd_file, ofs, page_read_bytes, page_zero_bytes);
+    upage =+ PGSIZE;
+    ofs =+ PGSIZE;
+    file_size -= PGSIZE;
+  } 
+  /* Record mapping */
 
   /* TODO: mapID*/
   return 1;
