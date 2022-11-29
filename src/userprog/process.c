@@ -1,5 +1,6 @@
 #include "userprog/process.h"
 #include <debug.h>
+#include <hash.h>
 #include <inttypes.h>
 #include <round.h>
 #include <stdio.h>
@@ -629,9 +630,11 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
 #ifdef VM
       /* Lazy loading of page */
-     
-      /* Ensure that upage is unmapped */
-      ASSERT (!pagedir_get_page (t->pagedir, upage));
+      
+      /* If page already mapped, delete entry and rewrite loading data */   
+      struct sup_page_table_entry spte_aux = {.upage = upage};
+      hash_delete (&(t->sup_page_table->hash_spt_table), &(spte_aux.hash_elem));
+
 
       bool result = spt_add_exec_page (t->sup_page_table, upage, writable, file, ofs, page_read_bytes, page_zero_bytes);
       if (!result)
