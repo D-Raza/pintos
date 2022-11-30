@@ -39,6 +39,7 @@ struct shareable_page
 void frame_init (void);
 void free_frame_table ();
 
+void frame_free_process (void *kpage, uint32_t *pd, void *upage);
 void frame_free (void *kpage);
 
 void* frame_get (enum palloc_flags f);

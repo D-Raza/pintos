@@ -111,7 +111,6 @@ frame_get (enum palloc_flags f)
     #endif
 }
 
-
 /* Frees all frames from frame table belonging to a process */
 void
 free_frame_table ()
@@ -149,6 +148,34 @@ free_frame_table ()
   #endif
 }
 
+/* Frees reference from pd & upage to frame, if it was the last reference triggers freeing of entire entry */
+void
+frame_free_process (void *kpage, uint32_t *pd, void *upage)
+{
+  struct frame_table_entry *ft_entry = find_frame (kpage);
+  struct list *page_refs = &ft_entry->page_table_refs;
+
+  struct list_elem *e;
+  struct page_table_ref *pr;
+  for (e = list_begin (page_refs); e != list_end (page_refs); e = list_next (e))
+  {
+    pr = list_entry (e, struct page_table_ref, elem);
+    if (pr->pd == pd && pr->page == upage)
+    {
+      pagedir_clear_page(pr->pd, pr->page);
+      list_remove (&pr->elem);
+      free (pr);
+      break;
+    }
+  }
+
+  if (list_empty (page_refs))
+  {
+    frame_free (kpage);
+  }
+}
+
+/* Destroys entire frame table entry corresponding to kpage */
 void 
 frame_free (void *kpage)
 {   
