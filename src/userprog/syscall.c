@@ -613,7 +613,7 @@ clean_mmap (struct mmap_file *entry)
   {
     if (pagedir_is_dirty (pd, i))
     {
-      // save page
+      spt_save_page (pd, i);
     }
     void *frame = pagedir_get_page (pd, i);
     if (frame != NULL)

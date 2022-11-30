@@ -283,6 +283,25 @@ find_spte (struct sup_page_table *sp_table, void *upage)
     }
 }
 
+/* Saves a page that is known to be dirty (and in the given page table) to its source */
+bool
+spt_save_page (uint32_t *pd, void *upage)
+{
+  struct sup_page_table_entry *entry = find_spte (thread_current ()->sup_page_table, upage);
+  if (entry == NULL)
+  {
+    return false;
+  }
+  else
+  {
+    void *kpage = pagedir_get_page (pd, upage);
+    file_sys_lock_acquire ();
+    file_write_at (entry->file, kpage, entry->read_bytes, entry->offset);
+    file_sys_lock_release ();
+    return true;
+  }
+}
+
 static bool 
 spt_hash_less_func (const struct hash_elem *h1_raw, const struct hash_elem *h2_raw, void *aux UNUSED)
 {   
