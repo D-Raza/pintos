@@ -61,6 +61,7 @@ frame_install (void *kpage, void *upage)
       /* Initialise frame table entry */
       fte->kpage = kpage;
       fte->upage = upage;
+      fte->shpage = NULL;
       list_init (&fte->page_table_refs);
       fte->evictable = false;
 
