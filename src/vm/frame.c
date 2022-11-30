@@ -47,7 +47,7 @@ frame_init (void)
 }
 
 void 
-frame_install (void *kpage, void *upage)
+frame_install (void *kpage, void *upage, struct shareable_page *shpage)
 {
   #ifdef VM
 
@@ -61,7 +61,7 @@ frame_install (void *kpage, void *upage)
       /* Initialise frame table entry */
       fte->kpage = kpage;
       fte->upage = upage;
-      fte->shpage = NULL;
+      fte->shpage = shpage;
       list_init (&fte->page_table_refs);
       fte->evictable = false;
 
@@ -78,6 +78,14 @@ frame_install (void *kpage, void *upage)
       // pagedir_set_page (pgtr->pd, upage, kpage, writable);
       hash_insert (&frame_table, &fte->hash_elem);
       lock_release (&frame_table_lock);
+
+      /* If successful and shpage is set, add frame entry to shpage */
+      if (shpage)
+      {
+        lock_acquire (&shareable_table_lock);
+        shpage->frame = fte;
+        lock_release (&shareable_table_lock);
+      }
     } 
   else 
     {

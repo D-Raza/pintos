@@ -50,7 +50,7 @@ spt_load_handler (struct sup_page_table *sp_table, void *fault_addr, uint32_t *p
     {
       return false;
     }
-  
+  struct shareable_page *shpage = NULL;
   /* Load the page into the frame */
   bool writable = true;
   switch (spt_entry->type)
@@ -68,6 +68,10 @@ spt_load_handler (struct sup_page_table *sp_table, void *fault_addr, uint32_t *p
             return false;
           }
         writable = spt_entry->writable;
+	if (!writable)
+	{
+	  shpage = shareable_page_add (file_get_inode (spt_entry->file), spt_entry->offset);
+	}
         break;
       case PAGE_MMAP:
         if (!spt_load_exec (spt_entry, kpage))
@@ -75,6 +79,7 @@ spt_load_handler (struct sup_page_table *sp_table, void *fault_addr, uint32_t *p
             frame_free (kpage); //TODO see above
             return false;
 	  }
+	shpage = shareable_page_add (file_get_inode (spt_entry->file), spt_entry->offset);
 	break;
       case PAGE_FRAME:
         break;
@@ -88,7 +93,7 @@ spt_load_handler (struct sup_page_table *sp_table, void *fault_addr, uint32_t *p
     }
   spt_entry->type = PAGE_FRAME;
   spt_entry->kpage = kpage;
-  frame_install (kpage, fault_addr);
+  frame_install (kpage, fault_addr, shpage);
   pagedir_set_dirty (pd, fault_addr, false);
   return true;
 }

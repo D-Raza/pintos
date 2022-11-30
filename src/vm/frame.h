@@ -43,7 +43,7 @@ void frame_free_process (void *kpage, uint32_t *pd, void *upage);
 void frame_free (void *kpage);
 
 void* frame_get (enum palloc_flags f);
-void frame_install (void *kpage, void *upage);
+void frame_install (void *kpage, void *upage, struct shareable_page *shpage);
 
 struct shareable_page* shareable_page_add (struct inode *file_inode, off_t offset);
 
