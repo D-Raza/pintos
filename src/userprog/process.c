@@ -237,6 +237,9 @@ process_exit (void)
   uint32_t *pd;
 
   #ifdef VM
+  
+  free_mmap_table (cur->mmaped_files);
+  
   /* Free:
      The supplemental page table
      The mmap table(?) later

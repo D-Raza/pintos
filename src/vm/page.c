@@ -14,6 +14,7 @@ static unsigned mmap_hash_hash_func (const struct hash_elem *hash_elem, void *au
 static struct sup_page_table_entry *find_spte (struct sup_page_table *sp_table, void *upage);
 static bool spt_load_exec (struct sup_page_table_entry *spt_entry, void *kpage);
 static void free_spt_entry (struct hash_elem *he, void *aux UNUSED);
+static void free_mmap_entry (struct hash_elem *he, void *aux UNUSED);
 
 /* Creates a supplementary page table. */
 struct sup_page_table*
@@ -351,4 +352,18 @@ mmaped_files_table_create (void)
       }
 }
 
+void 
+free_mmap_table (struct mmaped_files_table *mmap_table)
+{
+  if (mmap_table)
+  {
+    hash_destroy (&mmap_table->mmaped_files, free_mmap_entry);
+    free (mmap_table);
+  }
+}
 
+static void
+free_mmap_entry (struct hash_elem *he, void *aux UNUSED)
+{
+  clean_mmap (hash_entry (he, struct mmap_file, elem));
+}
