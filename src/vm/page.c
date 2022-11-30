@@ -11,6 +11,7 @@ static unsigned spt_hash_hash_func (const struct hash_elem *hash_elem, void *aux
 static struct sup_page_table_entry *find_spte (struct sup_page_table *sp_table, void *upage);
 static bool spt_load_exec (struct sup_page_table_entry *spt_entry, void *kpage);
 static void free_spt_entry (struct hash_elem *he, void *aux UNUSED);
+static void spt_load_all_zero (void *upage);
 
 /* Creates a supplementary page table. */
 struct sup_page_table*
@@ -43,7 +44,6 @@ spt_load_handler (struct sup_page_table *sp_table, void *fault_addr, uint32_t *p
   void *kpage = frame_get (PAL_USER);
   if (!kpage)
     {
-      printf("2");
       return false;
     }
   
@@ -52,8 +52,8 @@ spt_load_handler (struct sup_page_table *sp_table, void *fault_addr, uint32_t *p
   switch (spt_entry->type)
     {
       case PAGE_ALL_ZERO:
-        PANIC ("PAGE_ALL_ZERO not implemented");
-        break;
+          spt_load_all_zero (kpage);
+          break;
       case PAGE_SWAP:
         PANIC ("PAGE_SWAP not implemented");
         break;
@@ -99,6 +99,33 @@ spt_add_exec_page (struct sup_page_table *sp_table, void *upage, bool writable, 
       spt_entry->read_bytes = read_bytes;
       spt_entry->zero_bytes = zero_bytes;
       spt_entry->writable = writable;
+
+      struct hash_elem *h = hash_insert (&sp_table->hash_spt_table, &spt_entry->hash_elem);
+      if (!h)
+        {
+          return true;
+        }
+      else 
+        {
+          free (spt_entry);
+          return false;
+        }
+    }
+  else 
+    {
+      return false;
+    }
+}
+
+bool 
+spt_add_all_zero_page (struct sup_page_table *sp_table, void *upage)
+{
+  struct sup_page_table_entry *spt_entry = malloc (sizeof (struct sup_page_table_entry));
+  if (spt_entry)
+    {
+      spt_entry->type = PAGE_ALL_ZERO;
+      spt_entry->upage = upage; 
+      spt_entry->writable = true;
 
       struct hash_elem *h = hash_insert (&sp_table->hash_spt_table, &spt_entry->hash_elem);
       if (!h)
@@ -198,6 +225,12 @@ spt_load_exec (struct sup_page_table_entry *spt_entry, void *kpage)
      }
   memset (kpage + spt_entry->read_bytes, 0, spt_entry->zero_bytes);
   return true;
+}
+
+static void
+spt_load_all_zero (void *upage)
+{
+  memset (upage, 0, PGSIZE);
 }
 
 static struct sup_page_table_entry*
