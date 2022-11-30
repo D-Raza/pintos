@@ -507,7 +507,7 @@ static int
 sys_mmap (int args[])
 {
   int fd = args[0];
-  void *addr = args[1];
+  void *addr = (void *) args[1];
   void *last_addr;
   /* Validate fd and file */
   struct file *fd_file = get_file (fd);
@@ -551,7 +551,7 @@ sys_mmap (int args[])
     size_t page_zero_bytes = PGSIZE - page_read_bytes;
    
     success &= spt_add_mmap_page (thread_current ()->sup_page_table, upage, true, fd_file, ofs, page_read_bytes, page_zero_bytes);
-    upage =+ PGSIZE;
+    upage = (void *) ((int) upage + PGSIZE);
     ofs =+ PGSIZE;
     file_size -= PGSIZE;
   } 
