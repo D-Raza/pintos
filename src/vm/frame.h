@@ -28,6 +28,8 @@ struct page_table_ref
 };
 
 void frame_init (void);
+void free_frame_table ();
+
 void frame_free (void *kpage);
 
 void* frame_get (enum palloc_flags f);

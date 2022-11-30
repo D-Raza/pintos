@@ -249,6 +249,7 @@ process_exit (void)
 
   /* Free the supplemental page table and all frames held by the process */
   free_sp_table (cur->sup_page_table);
+  free_frame_table ();
   #endif
 
 
