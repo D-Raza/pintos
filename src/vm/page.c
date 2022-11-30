@@ -9,6 +9,8 @@
 
 static bool spt_hash_less_func (const struct hash_elem *h1_raw, const struct hash_elem *h2_raw, void *aux);
 static unsigned spt_hash_hash_func (const struct hash_elem *hash_elem, void *aux);
+static bool mmap_hash_less_func (const struct hash_elem *h1_raw, const struct hash_elem *h2_raw, void *aux);
+static unsigned mmap_hash_hash_func (const struct hash_elem *hash_elem, void *aux);
 static struct sup_page_table_entry *find_spte (struct sup_page_table *sp_table, void *upage);
 static bool spt_load_exec (struct sup_page_table_entry *spt_entry, void *kpage);
 static void free_spt_entry (struct hash_elem *he, void *aux UNUSED);
@@ -316,3 +318,37 @@ spt_hash_hash_func (const struct hash_elem *hash_elem, void *aux UNUSED)
     struct sup_page_table_entry *spte = hash_entry (hash_elem, struct sup_page_table_entry, hash_elem);
     return hash_int ((int) spte->upage);
 }
+
+static bool
+mmap_hash_less_func (const struct hash_elem *h1_raw, const struct hash_elem *h2_raw, void *aux UNUSED)
+{
+    struct mmap_file *map1 = hash_entry (h1_raw, struct mmap_file, elem);
+    struct mmap_file *map2 = hash_entry (h2_raw, struct mmap_file, elem);
+    return map1->mapId < map2->mapId;
+}
+
+static unsigned
+mmap_hash_hash_func (const struct hash_elem *hash_elem, void *aux UNUSED)
+{
+    struct mmap_file *map = hash_entry (hash_elem, struct mmap_file, elem);
+    return hash_int (map->mapId);
+}
+
+struct mmaped_files_table*
+mmaped_files_table_create (void)
+{
+    struct mmaped_files_table *mmap_table = malloc (sizeof (struct mmaped_files_table));
+    if (mmap_table)
+      {
+        mmap_table->next_free_mapId = 0;
+	hash_init (&mmap_table->mmaped_files, mmap_hash_hash_func, mmap_hash_less_func, NULL);
+        return mmap_table;
+      }
+    else
+      {
+        free (mmap_table);
+        return NULL;
+      }
+}
+
+

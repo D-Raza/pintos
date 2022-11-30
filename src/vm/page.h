@@ -37,8 +37,14 @@ struct sup_page_table
 {
     struct hash hash_spt_table;           /* The hash table*/
 };
+struct mmaped_files_table
+{
+    int next_free_mapId;                /* Counter to generate new MapIds */
+    struct hash mmaped_files;           /* Hashmap of mmaped files */
+};
 
 struct sup_page_table *sup_page_table_create (void);
+struct mmaped_files_table *mmaped_files_table_create (void);
 bool spt_add_exec_page (struct sup_page_table *sp_table, void *upage, bool writable, struct file *file, off_t ofs, uint32_t read_bytes, uint32_t zero_bytes);
 bool spt_add_mmap_page (struct sup_page_table *sp_table, void *upage, bool writable, struct file *file, off_t ofs, uint32_t read_bytes, uint32_t zero_bytes);
 bool spt_add_frame_page (struct sup_page_table *sp_table, void *upage, void *page);

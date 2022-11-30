@@ -500,32 +500,28 @@ sys_close (int args[])
 and sets it in the thread struct*/
 static int get_new_mapId (void)
 {
-  thread_current () -> next_free_mapId++;
-  return thread_current () ->next_free_mapId;
+  struct thread *t = thread_current ();
+  t->mmaped_files->next_free_mapId++;
+  return t->mmaped_files->next_free_mapId;
 }
 
 /* Gets the struct mapping a mapId to its addresses. 
-   Returns null if the list of mappings of open files is empty
-   or if the mapping cannot be found. */
+   Returns null if the mapping cannot be found. */
 static struct mmap_file*
 get_mmap_file (int mapId)
 {
-  struct list *mapIds = &thread_current ()->mmaped_files;
-  if (list_empty (mapIds))
-    return NULL;
-  struct list_elem *e;
-  for (e = list_begin (mapIds); e != list_end (mapIds); e = list_next (e)) {
-    struct mmap_file *map = list_entry (e, struct mmap_file, elem);
-    if (map->mapId == mapId)
-      {
-        return map;
-      }
-    else if (map->mapId > mapId)
-      {
-        return NULL; /* as the list is ordered by ascending fd*/
-      }
-  }
-  return NULL;
+  struct mmap_file map_aux = {.mapId = mapId};
+  struct hash_elem *h = hash_find (&thread_current ()->mmaped_files->mmaped_files, &map_aux.elem);
+
+  /* If the entry is found, return it, otherwise return NULL */
+  if (h)
+    {
+      return hash_entry (h, struct sup_page_table_entry, hash_elem);
+    }
+  else
+    {
+      return NULL;
+    }
 }
 
 /*  Maps the file open as fd into the process's consecutive 
@@ -599,7 +595,7 @@ sys_mmap (int args[])
   mapping->first_upage = addr;
   mapping->last_upage = last_addr;
 
-  list_push_back (&t->mmaped_files, &mapping->elem);
+  hash_insert (&t->mmaped_files->mmaped_files, &mapping->elem);
 
   return mapId;
 }
@@ -624,7 +620,7 @@ clean_mmap (struct mmap_file *entry)
     bool last = (i == entry->last_upage);
     spt_clear_entry (i, last);
   } 
-  list_remove (&entry->elem);
+  hash_delete (&thread_current ()->mmaped_files->mmaped_files, &entry->elem);
   free (entry);
 }
 

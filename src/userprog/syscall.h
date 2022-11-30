@@ -3,6 +3,7 @@
 
 #include "filesys/file.h"
 #include <list.h>
+#include <hash.h>
 
 struct lock file_sys_lock;        /* locks section that modifies files */
 
@@ -21,7 +22,7 @@ struct mmap_file {
   int mapId;                       /* mapID */
   void *first_upage;               /* start of virtual memory range allocated to the file */
   void *last_upage;                /* end of virtual memory range allocated to the file */
-  struct list_elem elem;           /* list elem for list of mappings in thread */
+  struct hash_elem elem;           /* hash elem for collection of mappings in thread */
 };
 void clean_mmap (struct mmap_file *entry);
 #endif

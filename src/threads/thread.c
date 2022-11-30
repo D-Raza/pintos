@@ -580,10 +580,6 @@ init_thread (struct thread *t, const char *name, int priority)
   t->next_free_fd = 1;
   t->syscall = false;
 #endif
-#ifdef VM
-  t->next_free_mapId = 0;
-  list_init (&t->mmaped_files);
-#endif
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
@@ -594,7 +590,7 @@ init_thread (struct thread *t, const char *name, int priority)
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
    returns a pointer to the frame's base. */
 static void *
-alloc_frame (struct thread *t, size_t size) 
+alloc_frame (struct thread *t, size_t size)
 {
   /* Stack data is always allocated in word-size units. */
   ASSERT (is_thread (t));

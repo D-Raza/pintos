@@ -409,6 +409,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   /* Allocate supplemental page table */
   #ifdef VM
   t->sup_page_table = sup_page_table_create ();
+  t->mmaped_files = mmaped_files_table_create ();
   #endif
 
   /* Allocate and activate page directory. */
