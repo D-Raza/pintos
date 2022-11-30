@@ -516,7 +516,7 @@ get_mmap_file (int mapId)
   /* If the entry is found, return it, otherwise return NULL */
   if (h)
     {
-      return hash_entry (h, struct sup_page_table_entry, hash_elem);
+      return hash_entry (h, struct mmap_file, elem);
     }
   else
     {
