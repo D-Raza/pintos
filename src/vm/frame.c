@@ -12,17 +12,25 @@
 /* The frame table */
 static struct hash frame_table;
 
+/* The table of shareable pages */
+static struct hash shareable_table;
+
 /* A circular list of used frames for eviction (Two-Handed clock algorithm) */
 static struct list used_frames_list; 
 static struct list_elem *examine_ptr;
 static struct list_elem *reset_ptr;
 
-/* Lock for the frame table */
+/* Locks for the frame table and table of shareable pages */
 static struct lock frame_table_lock;
+static struct lock shareable_table_lock;
 
 
 static unsigned frame_hash_hash_func (const struct hash_elem *h, void *aux UNUSED);
 static bool frame_hash_less_func (const struct hash_elem *h1_raw, const struct hash_elem *h2_raw, void *aux UNUSED);
+
+static unsigned shareable_hash_hash_func (const struct hash_elem *h, void *aux UNUSED);
+static bool shareable_hash_less_func (const struct hash_elem *h1_raw, const struct hash_elem *h2_raw, void *aux UNUSED);
+
 static struct frame_table_entry* find_frame (void *kpage);
 
 /* Initialises the frame table and associated structs. */
@@ -32,6 +40,8 @@ frame_init (void)
     hash_init (&frame_table, frame_hash_hash_func, frame_hash_less_func, NULL);
     list_init (&used_frames_list);
     lock_init (&frame_table_lock);
+    hash_init (&shareable_table, shareable_hash_hash_func, shareable_hash_less_func, NULL);
+    lock_init (&shareable_table_lock);
     // examine_ptr = list_begin (&used_frames_list);
     // reset_ptr = list_begin (&used_frames_list);
 }
@@ -210,4 +220,24 @@ frame_hash_less_func (const struct hash_elem *h1_raw, const struct hash_elem *h2
     struct frame_table_entry *h1 = hash_entry (h1_raw, struct frame_table_entry, hash_elem);
     struct frame_table_entry *h2 = hash_entry (h2_raw, struct frame_table_entry, hash_elem);
     return h1->kpage < h2->kpage;
+}
+
+
+static unsigned
+shareable_hash_hash_func (const struct hash_elem *h, void *aux UNUSED)
+{
+  struct shareable_page *p = hash_entry (h, struct shareable_page, elem);
+  int64_t pair = ((((int32_t)(p->file_inode)) << 8) + p->offset);
+  return hash_bytes(&pair, 8);
+}
+
+
+static bool
+shareable_hash_less_func (const struct hash_elem *h1_raw, const struct hash_elem *h2_raw, void *aux UNUSED)
+{
+  struct shareable_page *p1 = hash_entry (h1_raw, struct shareable_page, elem);
+  struct shareable_page *p2 = hash_entry (h2_raw, struct shareable_page, elem);
+  int64_t pair1 = ((((int32_t) p1->file_inode) << 8) + p1->offset);
+  int64_t pair2 = ((((int32_t) p2->file_inode) << 8) + p2->offset);
+  return pair1 < pair2;
 }
