@@ -28,7 +28,7 @@ struct page_table_ref
 };
 
 void frame_init (void);
-void free_frame_table (struct thread *t);
+void free_frame_table ();
 
 void frame_free (void *kpage);
 
