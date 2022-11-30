@@ -2,6 +2,7 @@
 #include "vm/frame.h"
 #include "threads/malloc.h"
 #include "userprog/pagedir.h"
+#include "userprog/syscall.h"
 #include <hash.h>
 #include <string.h>
 #include <stdio.h>
@@ -131,7 +132,9 @@ spt_add_mmap_page (struct sup_page_table *sp_table, void *upage, bool writable, 
     {
       spt_entry->type = PAGE_MMAP;
       spt_entry->upage = upage;
-      spt_entry->file = file;
+      file_sys_lock_acquire ();
+      spt_entry->file = file_reopen (file);
+      file_sys_lock_release ();
       spt_entry->offset = ofs;
       spt_entry->read_bytes = read_bytes;
       spt_entry->zero_bytes = zero_bytes;
