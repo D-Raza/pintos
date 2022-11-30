@@ -123,6 +123,7 @@ struct thread
 #ifdef VM
     struct sup_page_table *sup_page_table; /* Supplemental page table */
     void* user_esp;                        /* User program stack pointer */
+    struct mmaped_files_table *mmaped_files; /* Records of mmaped files of process */
 #endif
 
     /* Owned by thread.c. */

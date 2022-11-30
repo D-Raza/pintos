@@ -2,16 +2,20 @@
 #include "vm/frame.h"
 #include "threads/malloc.h"
 #include "userprog/pagedir.h"
+#include "userprog/syscall.h"
 #include <hash.h>
 #include <string.h>
 #include <stdio.h>
 
 static bool spt_hash_less_func (const struct hash_elem *h1_raw, const struct hash_elem *h2_raw, void *aux);
 static unsigned spt_hash_hash_func (const struct hash_elem *hash_elem, void *aux);
+static bool mmap_hash_less_func (const struct hash_elem *h1_raw, const struct hash_elem *h2_raw, void *aux);
+static unsigned mmap_hash_hash_func (const struct hash_elem *hash_elem, void *aux);
 static struct sup_page_table_entry *find_spte (struct sup_page_table *sp_table, void *upage);
 static bool spt_load_exec (struct sup_page_table_entry *spt_entry, void *kpage);
 static void free_spt_entry (struct hash_elem *he, void *aux UNUSED);
 static void spt_load_all_zero (void *upage);
+static void free_mmap_entry (struct hash_elem *he, void *aux UNUSED);
 
 /* Creates a supplementary page table. */
 struct sup_page_table*
@@ -66,7 +70,12 @@ spt_load_handler (struct sup_page_table *sp_table, void *fault_addr, uint32_t *p
         writable = spt_entry->writable;
         break;
       case PAGE_MMAP:
-        PANIC ("PAGE_MMAPP not implemented");
+        if (!spt_load_exec (spt_entry, kpage))
+          {
+            frame_free (kpage);
+            return false;
+	  }
+	break;
       case PAGE_FRAME:
         break;
       default:
@@ -117,8 +126,7 @@ spt_add_exec_page (struct sup_page_table *sp_table, void *upage, bool writable, 
     }
 }
 
-bool 
-spt_add_all_zero_page (struct sup_page_table *sp_table, void *upage)
+bool spt_add_all_zero_page (struct sup_page_table *sp_table, void *upage)
 {
   struct sup_page_table_entry *spt_entry = malloc (sizeof (struct sup_page_table_entry));
   if (spt_entry)
@@ -126,13 +134,46 @@ spt_add_all_zero_page (struct sup_page_table *sp_table, void *upage)
       spt_entry->type = PAGE_ALL_ZERO;
       spt_entry->upage = upage; 
       spt_entry->writable = true;
+      struct hash_elem *h = hash_insert (&sp_table->hash_spt_table, &spt_entry->hash_elem);
+      if (!h)
+        {
+          return true;
+        }
+      else
+        {
+          free(spt_entry);
+          return false;
+        }
+    }
+  else 
+    {
+      return false;
+    }
+      
+}
+
+bool
+spt_add_mmap_page (struct sup_page_table *sp_table, void *upage, bool writable, struct file *file, off_t ofs, uint32_t read_bytes, uint32_t zero_bytes)
+{
+  struct sup_page_table_entry *spt_entry = malloc (sizeof (struct sup_page_table_entry));
+  if (spt_entry)
+    {
+      spt_entry->type = PAGE_MMAP;
+      spt_entry->upage = upage;
+      file_sys_lock_acquire ();
+      spt_entry->file = file_reopen (file);
+      file_sys_lock_release ();
+      spt_entry->offset = ofs;
+      spt_entry->read_bytes = read_bytes;
+      spt_entry->zero_bytes = zero_bytes;
+      spt_entry->writable = writable;
 
       struct hash_elem *h = hash_insert (&sp_table->hash_spt_table, &spt_entry->hash_elem);
       if (!h)
         {
           return true;
         }
-      else 
+      else
         {
           free (spt_entry);
           return false;
@@ -215,6 +256,31 @@ free_spt_entry (struct hash_elem *he, void *aux UNUSED)
     }
 }
 
+/* finds an spt entry in current thread given a *upage removes and frees it
+   returns true if it was found, false if not */
+bool
+spt_clear_entry (void *upage, bool last)
+{
+  struct sup_page_table *spt = thread_current ()->sup_page_table;
+  struct sup_page_table_entry *entry = find_spte (thread_current ()->sup_page_table, upage);
+  if (entry == NULL)
+  {
+    return false;
+  }
+  else
+  {
+    if (last)
+    {
+      file_sys_lock_acquire ();
+      file_close (entry -> file);
+      file_sys_lock_release ();
+    }
+    hash_delete (&spt->hash_spt_table, &entry->hash_elem);
+    free_spt_entry (&entry -> hash_elem, NULL);
+    return true;
+  }
+}
+
 static bool 
 spt_load_exec (struct sup_page_table_entry *spt_entry, void *kpage)
 {
@@ -250,6 +316,25 @@ find_spte (struct sup_page_table *sp_table, void *upage)
     }
 }
 
+/* Saves a page that is known to be dirty (and in the given page table) to its source */
+bool
+spt_save_page (uint32_t *pd, void *upage)
+{
+  struct sup_page_table_entry *entry = find_spte (thread_current ()->sup_page_table, upage);
+  if (entry == NULL)
+  {
+    return false;
+  }
+  else
+  {
+    void *kpage = pagedir_get_page (pd, upage);
+    file_sys_lock_acquire ();
+    file_write_at (entry->file, kpage, entry->read_bytes, entry->offset);
+    file_sys_lock_release ();
+    return true;
+  }
+}
+
 static bool 
 spt_hash_less_func (const struct hash_elem *h1_raw, const struct hash_elem *h2_raw, void *aux UNUSED)
 {   
@@ -263,4 +348,52 @@ spt_hash_hash_func (const struct hash_elem *hash_elem, void *aux UNUSED)
 {
     struct sup_page_table_entry *spte = hash_entry (hash_elem, struct sup_page_table_entry, hash_elem);
     return hash_int ((int) spte->upage);
+}
+
+static bool
+mmap_hash_less_func (const struct hash_elem *h1_raw, const struct hash_elem *h2_raw, void *aux UNUSED)
+{
+    struct mmap_file *map1 = hash_entry (h1_raw, struct mmap_file, elem);
+    struct mmap_file *map2 = hash_entry (h2_raw, struct mmap_file, elem);
+    return map1->mapId < map2->mapId;
+}
+
+static unsigned
+mmap_hash_hash_func (const struct hash_elem *hash_elem, void *aux UNUSED)
+{
+    struct mmap_file *map = hash_entry (hash_elem, struct mmap_file, elem);
+    return hash_int (map->mapId);
+}
+
+struct mmaped_files_table*
+mmaped_files_table_create (void)
+{
+    struct mmaped_files_table *mmap_table = malloc (sizeof (struct mmaped_files_table));
+    if (mmap_table)
+      {
+        mmap_table->next_free_mapId = 0;
+	hash_init (&mmap_table->mmaped_files, mmap_hash_hash_func, mmap_hash_less_func, NULL);
+        return mmap_table;
+      }
+    else
+      {
+        free (mmap_table);
+        return NULL;
+      }
+}
+
+void 
+free_mmap_table (struct mmaped_files_table *mmap_table)
+{
+  if (mmap_table)
+  {
+    hash_destroy (&mmap_table->mmaped_files, free_mmap_entry);
+    free (mmap_table);
+  }
+}
+
+static void
+free_mmap_entry (struct hash_elem *he, void *aux UNUSED)
+{
+  clean_mmap (hash_entry (he, struct mmap_file, elem));
 }

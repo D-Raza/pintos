@@ -17,6 +17,12 @@
 #include <string.h>
 #include <debug.h>
 
+#ifdef VM
+#include "vm/frame.h"
+#endif
+
+#define MAPID_ERROR -1
+
 static void syscall_handler (struct intr_frame *);
 static bool validate_string (const char *str);
 static int get_user (const uint8_t *uaddr);
@@ -39,6 +45,8 @@ static int sys_write (int args[]);
 static int sys_seek (int args[]);
 static int sys_tell (int args[]);
 static int sys_close (int args[]);
+static int sys_mmap (int args[]);
+static int sys_munmap (int args[]);
 
 
 void
@@ -486,6 +494,150 @@ sys_close (int args[])
   return 0;
 }
 
+#ifdef VM
+
+/* Returns value of the next mapId available to use 
+and sets it in the thread struct*/
+static int get_new_mapId (void)
+{
+  struct thread *t = thread_current ();
+  t->mmaped_files->next_free_mapId++;
+  return t->mmaped_files->next_free_mapId;
+}
+
+/* Gets the struct mapping a mapId to its addresses. 
+   Returns null if the mapping cannot be found. */
+static struct mmap_file*
+get_mmap_file (int mapId)
+{
+  struct mmap_file map_aux = {.mapId = mapId};
+  struct hash_elem *h = hash_find (&thread_current ()->mmaped_files->mmaped_files, &map_aux.elem);
+
+  /* If the entry is found, return it, otherwise return NULL */
+  if (h)
+    {
+      return hash_entry (h, struct sup_page_table_entry, hash_elem);
+    }
+  else
+    {
+      return NULL;
+    }
+}
+
+/*  Maps the file open as fd into the process's consecutive 
+    virtual memory pages starting at addr */
+static int 
+sys_mmap (int args[])
+{
+  int fd = args[0];
+  void *addr = (void *) args[1];
+  void *last_addr;
+  struct thread *t = thread_current ();
+  /* Validate fd and file */
+  struct file *fd_file = get_file (fd);
+  if (fd_file == NULL)
+  {
+    return MAPID_ERROR;
+  } 
+  file_sys_lock_acquire ();
+  int file_size = file_length (fd_file);
+  file_sys_lock_release ();
+  if (file_size == 0)
+  {
+    return MAPID_ERROR;
+  }
+  /* Validate addr: not 0, page-aligned and clear range*/
+  if (addr == NULL || ((int) addr & 0x7) != 0)
+  {
+    return MAPID_ERROR;
+  } else {
+    last_addr = pg_round_down (addr + file_size - 1);
+    // TODO: validate last page not in stackspace
+    struct sup_page_table *spt = t->sup_page_table;
+    for (void * i = addr; i <= last_addr; i += PGSIZE)
+    {
+      struct sup_page_table_entry spte_aux = {.upage = i};
+
+      if (hash_find (&spt->hash_spt_table, &spte_aux.hash_elem)!= NULL)
+      {
+        return MAPID_ERROR;
+      }
+    }
+  }
+
+  /* Make entries in SPT */
+  void *upage = addr;
+  int ofs = 0;
+  bool success = true;
+  while (file_size > 0)
+  {
+    size_t page_read_bytes = file_size < PGSIZE ? file_size : PGSIZE;
+    size_t page_zero_bytes = PGSIZE - page_read_bytes;
+   
+    success &= spt_add_mmap_page (t->sup_page_table, upage, true, fd_file, ofs, page_read_bytes, page_zero_bytes);
+    upage = (void *) ((int) upage + PGSIZE);
+    ofs =+ PGSIZE;
+    file_size -= PGSIZE;
+  } 
+  if (!success)
+  {
+    //TODO Add sufficient clean up
+    return MAPID_ERROR;
+  }
+  /* Record mapping */
+  struct mmap_file *mapping = malloc (sizeof (struct mmap_file));
+  if (mapping == NULL)
+  {
+    thread_exit ();
+  }
+  int mapId = get_new_mapId ();
+  mapping->mapId = mapId;
+  mapping->first_upage = addr;
+  mapping->last_upage = last_addr;
+
+  hash_insert (&t->mmaped_files->mmaped_files, &mapping->elem);
+
+  return mapId;
+}
+
+/* Cleans up the mapping corresponding to the map entry and removes it from the list */
+void
+clean_mmap (struct mmap_file *entry)
+{
+  uint32_t *pd = thread_current ()->pagedir;
+  for (void *i = entry->first_upage; i <= entry->last_upage; i += PGSIZE)
+  {
+    if (pagedir_is_dirty (pd, i))
+    {
+      spt_save_page (pd, i);
+    }
+    void *frame = pagedir_get_page (pd, i);
+    if (frame != NULL)
+    {
+      frame_free (frame);
+      pagedir_clear_page (pd, i);
+    }
+    bool last = (i == entry->last_upage);
+    spt_clear_entry (i, last);
+  } 
+  hash_delete (&thread_current ()->mmaped_files->mmaped_files, &entry->elem);
+  free (entry);
+}
+
+
+/* Unmaps the mapping designated by mapping */
+static int
+sys_munmap (int args[])
+{
+  mapid_t mapping = args[0];
+
+  struct mmap_file *map = get_mmap_file (mapping);
+  clean_mmap (map);
+
+  return 0;
+}
+#endif
+
 /* Calls system calls by using an array of function pointers to them and maps 
    syscall number to the appropriate function and number of arguments.
    If esp cannot be read or the syscall number is not valid, thread_exit is called.  */
@@ -508,13 +660,18 @@ syscall_handler (struct intr_frame *f)
     [SYS_TELL] = sys_tell,
     [SYS_CLOSE] = sys_close
 
-    /*
     #ifdef VM
+    ,
     [SYS_MMAP] = sys_mmap,
     [SYS_MUNMAP] = sys_munmap
     #endif
-    */
   };
+  
+  #ifdef VM
+  int max_sys_call_no = SYS_MUNMAP;
+  #else
+  int max_sys_call_no = SYS_MUNMAP;
+  #endif
 
   struct thread* cur = thread_current ();
   cur->syscall = true;
@@ -524,7 +681,8 @@ syscall_handler (struct intr_frame *f)
       thread_exit ();
     }
   int syscall_no = * (int *) f->esp;
-  if (syscall_no >= 0 && syscall_no <= SYS_CLOSE)
+   
+  if (syscall_no >= 0 && syscall_no <= max_sys_call_no)
     {
       #ifdef VM
       cur->user_esp = f->esp;
