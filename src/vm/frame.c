@@ -200,16 +200,20 @@ frame_free (void *kpage)
           {
             /* Clear the page table entries pointing to the frame and free the structs */
             struct list *prs = &ft_entry->page_table_refs;
-             while (!list_empty(prs))
-               {
-                 struct page_table_ref *pr = list_entry 
-                      (list_pop_front (prs), struct page_table_ref, elem);
-                  pagedir_clear_page(pr->pd, pr->page);
-                  list_remove (&pr->elem);
-                  free (pr);
-               }
-           
-            // list_remove (&fte_actual->list_elem); 
+            while (!list_empty(prs))
+              {
+                struct page_table_ref *pr = list_entry 
+                     (list_pop_front (prs), struct page_table_ref, elem);
+                 pagedir_clear_page(pr->pd, pr->page);
+                 list_remove (&pr->elem);
+                 free (pr);
+              }
+            /* Remove and free the corresponding shareable_page table entry, if existed */ 
+            if (ft_entry->shpage)
+            {
+              hash_delete (&shareable_table, &ft_entry->shpage->elem);
+              free (ft_entry->shpage);
+            }
             palloc_free_page (kpage);
             free (ft_entry);
           }
