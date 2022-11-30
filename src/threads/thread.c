@@ -582,6 +582,7 @@ init_thread (struct thread *t, const char *name, int priority)
 #endif
 #ifdef VM
   t->next_free_mapId = 0;
+  list_init (&t->mmaped_files);
 #endif
   t->magic = THREAD_MAGIC;
 

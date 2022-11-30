@@ -44,5 +44,6 @@ bool spt_add_mmap_page (struct sup_page_table *sp_table, void *upage, bool writa
 bool spt_add_frame_page (struct sup_page_table *sp_table, void *upage, void *page);
 bool spt_load_handler (struct sup_page_table *sp_table, void *fault_addr, uint32_t *pd);
 void free_sp_table (struct sup_page_table *sp_table);
+bool spt_clear_entry (void *upage, bool last);
  
 #endif /* vm/page.h */

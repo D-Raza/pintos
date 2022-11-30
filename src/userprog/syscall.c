@@ -17,6 +17,10 @@
 #include <string.h>
 #include <debug.h>
 
+#ifdef VM
+#include "vm/frame.h"
+#endif
+
 #define MAPID_ERROR -1
 
 static void syscall_handler (struct intr_frame *);
@@ -500,6 +504,29 @@ static int get_new_mapId (void)
   return thread_current () ->next_free_mapId;
 }
 
+/* Gets the struct mapping a mapId to its addresses. 
+   Returns null if the list of mappings of open files is empty
+   or if the mapping cannot be found. */
+static struct mmap_file*
+get_mmap_file (int mapId)
+{
+  struct list *mapIds = &thread_current ()->mmaped_files;
+  if (list_empty (mapIds))
+    return NULL;
+  struct list_elem *e;
+  for (e = list_begin (mapIds); e != list_end (mapIds); e = list_next (e)) {
+    struct mmap_file *map = list_entry (e, struct mmap_file, elem);
+    if (map->mapId == mapId)
+      {
+        return map;
+      }
+    else if (map->mapId > mapId)
+      {
+        return NULL; /* as the list is ordered by ascending fd*/
+      }
+  }
+  return NULL;
+}
 
 /*  Maps the file open as fd into the process's consecutive 
     virtual memory pages starting at addr */
@@ -509,6 +536,7 @@ sys_mmap (int args[])
   int fd = args[0];
   void *addr = (void *) args[1];
   void *last_addr;
+  struct thread *t = thread_current ();
   /* Validate fd and file */
   struct file *fd_file = get_file (fd);
   if (fd_file == NULL)
@@ -529,7 +557,7 @@ sys_mmap (int args[])
   } else {
     last_addr = pg_round_down (addr + file_size - 1);
     // TODO: validate last page not in stackspace
-    struct sup_page_table *spt = thread_current ()->sup_page_table;
+    struct sup_page_table *spt = t->sup_page_table;
     for (void * i = addr; i <= last_addr; i += PGSIZE)
     {
       struct sup_page_table_entry spte_aux = {.upage = i};
@@ -550,7 +578,7 @@ sys_mmap (int args[])
     size_t page_read_bytes = file_size < PGSIZE ? file_size : PGSIZE;
     size_t page_zero_bytes = PGSIZE - page_read_bytes;
    
-    success &= spt_add_mmap_page (thread_current ()->sup_page_table, upage, true, fd_file, ofs, page_read_bytes, page_zero_bytes);
+    success &= spt_add_mmap_page (t->sup_page_table, upage, true, fd_file, ofs, page_read_bytes, page_zero_bytes);
     upage = (void *) ((int) upage + PGSIZE);
     ofs =+ PGSIZE;
     file_size -= PGSIZE;
@@ -571,8 +599,35 @@ sys_mmap (int args[])
   mapping->first_upage = addr;
   mapping->last_upage = last_addr;
 
+  list_push_back (&t->mmaped_files, &mapping->elem);
+
   return mapId;
 }
+
+/* Cleans up the mapping corresponding to the map entry and removes it from the list */
+void
+clean_mmap (struct mmap_file *entry)
+{
+  uint32_t *pd = thread_current ()->pagedir;
+  for (void *i = entry->first_upage; i <= entry->last_upage; i += PGSIZE)
+  {
+    if (pagedir_is_dirty (pd, i))
+    {
+      // save page
+    }
+    void *frame = pagedir_get_page (pd, i);
+    if (frame != NULL)
+    {
+      frame_free (frame);
+      pagedir_clear_page (pd, i);
+    }
+    bool last = (i == entry->last_upage);
+    spt_clear_entry (i, last);
+  } 
+  list_remove (&entry->elem);
+  free (entry);
+}
+
 
 /* Unmaps the mapping designated by mapping */
 static int
@@ -580,11 +635,8 @@ sys_munmap (int args[])
 {
   mapid_t mapping = args[0];
 
-  /* Find mapping struct */
-
-  /* Remove corresponding entries - save if dirty */
-
-  /* Remove mapping struct */
+  struct mmap_file *map = get_mmap_file (mapping);
+  clean_mmap (map);
 
   return 0;
 }

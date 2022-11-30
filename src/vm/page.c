@@ -229,6 +229,31 @@ free_spt_entry (struct hash_elem *he, void *aux UNUSED)
     }
 }
 
+/* finds an spt entry in current thread given a *upage removes and frees it
+   returns true if it was found, false if not */
+bool
+spt_clear_entry (void *upage, bool last)
+{
+  struct sup_page_table *spt = thread_current ()->sup_page_table;
+  struct sup_page_table_entry *entry = find_spte (thread_current ()->sup_page_table, upage);
+  if (entry == NULL)
+  {
+    return false;
+  }
+  else
+  {
+    if (last)
+    {
+      file_sys_lock_acquire ();
+      file_close (entry -> file);
+      file_sys_lock_release ();
+    }
+    hash_delete (&spt->hash_spt_table, &entry->hash_elem);
+    free_spt_entry (&entry -> hash_elem, NULL);
+    return true;
+  }
+}
+
 static bool 
 spt_load_exec (struct sup_page_table_entry *spt_entry, void *kpage)
 {

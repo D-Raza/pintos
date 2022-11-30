@@ -123,7 +123,7 @@ struct thread
 #ifdef VM
     struct sup_page_table *sup_page_table; /* Supplemental page table */
     int next_free_mapId;
-    struct list *mmaped_files;          /* List of mmaped files TODO turn into hashmap */
+    struct list mmaped_files;          /* List of mmaped files TODO turn into hashmap */
 #endif
 
     /* Owned by thread.c. */
