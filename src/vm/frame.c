@@ -276,18 +276,21 @@ shareable_hash_less_func (const struct hash_elem *h1_raw, const struct hash_elem
 
 
 /* Makes entry in the shareable_pages_table */
-bool shareable_page_add (struct inode *file_inode, off_t offset)
+struct shareable_page* 
+shareable_page_add (struct inode *file_inode, off_t offset)
 {
   struct shareable_page *shpage = malloc (sizeof (struct shareable_page));
   if (shpage)
   {
     shpage->file_inode = file_inode;
     shpage->offset = offset;
+    lock_acquire (&shareable_table_lock);
     hash_insert (&shareable_table, &shpage->elem);
-    return true;
+    lock_release (&shareable_table_lock);
+    return shpage;
   }
   else
   {
-    return false;
+    return NULL;
   }
 }
