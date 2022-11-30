@@ -102,6 +102,41 @@ frame_get (enum palloc_flags f)
 }
 
 
+/* Frees all frames from frame table belonging to a process */
+void
+free_frame_table (struct thread *t)
+{
+  #ifdef userprog
+  struct hash *ftPointer = &frame_table;
+  if (ftPointer)
+    {
+      for (int i = 0; i < (int) ftPointer->bucket_cnt; i++)
+        {
+          struct list *bucket = &ftPointer->buckets[i];
+          struct list_elem *elem, *next;
+          for (elem = list_begin (bucket);
+              elem != list_end (bucket); elem = next)
+            {
+	      struct frame_table_entry *fp = list_entry (elem, struct frame_table_entry, list_elem);
+	      struct hash_elem *table_entry = list_entry(elem, struct hash_elem, list_elem);
+	      if (table_entry != NULL)
+	        {
+	          struct list *pgtrs = &fp -> page_table_refs;
+	          struct list_elem *pgtr, *pgtr_next;
+	          for (pgtr = list_begin (pgtrs); pgtr != list_end (pgtrs); pgtr = pgtr_next)
+	            {
+		      struct page_table_ref *pgt_ref = list_entry (pgtr, struct page_table_ref, elem);
+	              if (&pgt_ref->pd == thread_current () ->pagedir)
+		        {
+	                  frame_free (&fp -> kpage);
+	                }
+	            }
+                }
+	     }
+        }
+     }
+  #endif
+}
 
 void 
 frame_free (void *kpage)
