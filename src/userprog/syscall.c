@@ -526,6 +526,9 @@ syscall_handler (struct intr_frame *f)
   int syscall_no = * (int *) f->esp;
   if (syscall_no >= 0 && syscall_no <= SYS_CLOSE)
     {
+      #ifdef VM
+      cur->user_esp = f->esp;
+      #endif
       int *args = f->esp + 4;
       f->eax = (sys_functions[syscall_no])(args);
       cur->syscall = false;

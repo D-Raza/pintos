@@ -4,7 +4,7 @@
 #include "userprog/gdt.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
-#include "threads/vaddr.h"
+#include "vm/page.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -106,6 +106,8 @@ kill (struct intr_frame *f)
     }
 }
 
+static bool check_stack_growth (void *fault_addr, void *esp);
+
 /* Page fault handler.  This is a skeleton that must be filled in
    to implement virtual memory.  Some solutions to task 2 may
    also require modifying this code.
@@ -150,7 +152,16 @@ page_fault (struct intr_frame *f)
 
   #ifdef VM
   
-  if (spt_load_handler (t->sup_page_table, pg_round_down (fault_addr), t->pagedir))
+  void *fault_addr_rounded = pg_round_down (fault_addr);
+
+  /* Stack needs to grow */
+   bool grow = user ? check_stack_growth (fault_addr, f->esp) : check_stack_growth (fault_addr, t->user_esp);
+   if (grow)
+     {
+       spt_add_all_zero_page(t->sup_page_table, fault_addr_rounded);
+     }
+
+  if (spt_load_handler (t->sup_page_table, fault_addr_rounded, t->pagedir))
     {
       return;
     }
@@ -177,3 +188,9 @@ page_fault (struct intr_frame *f)
   kill (f);
 }
 
+/* Checks if it is a valid case for stack growth */
+static bool
+check_stack_growth (void *fault_addr, void *esp)
+{  
+   return fault_addr >= esp - PUSH_A_SIZE && fault_addr >= STACK_END && fault_addr < PHYS_BASE;
+}
