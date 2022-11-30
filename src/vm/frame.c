@@ -138,7 +138,7 @@ free_frame_table ()
 		      struct page_table_ref *pgt_ref = list_entry (pgtr, struct page_table_ref, elem);
 	              if (&pgt_ref->pd == t ->pagedir)
 		        {
-	                  frame_free (&fp -> kpage);
+	                  frame_free (&fp -> kpage); //TODO review if needs to change to frame_free_process
 	                }
 	            }
                 }

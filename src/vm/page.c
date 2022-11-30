@@ -64,7 +64,7 @@ spt_load_handler (struct sup_page_table *sp_table, void *fault_addr, uint32_t *p
       case PAGE_EXEC:
         if (!spt_load_exec (spt_entry, kpage))
           {
-            frame_free (kpage);
+            frame_free (kpage); //TODO review if necessary (load doesn't add to frame table)
             return false;
           }
         writable = spt_entry->writable;
@@ -72,7 +72,7 @@ spt_load_handler (struct sup_page_table *sp_table, void *fault_addr, uint32_t *p
       case PAGE_MMAP:
         if (!spt_load_exec (spt_entry, kpage))
           {
-            frame_free (kpage);
+            frame_free (kpage); //TODO see above
             return false;
 	  }
 	break;
@@ -83,7 +83,7 @@ spt_load_handler (struct sup_page_table *sp_table, void *fault_addr, uint32_t *p
     }
   if (!pagedir_set_page (pd, fault_addr, kpage, writable))
     {
-      frame_free (kpage);
+      frame_free (kpage); //TODO see above
       return false;
     }
   spt_entry->type = PAGE_FRAME;
@@ -246,7 +246,7 @@ free_spt_entry (struct hash_elem *he, void *aux UNUSED)
           case PAGE_FRAME:
             if (spt_entry->kpage)
               {
-                frame_free (spt_entry->kpage);
+                frame_free (spt_entry->kpage); //TODO Review PAGE_FRAME case possibly depreciated
               }
             break;
           default:
