@@ -44,7 +44,9 @@ void frame_free (void *kpage);
 
 void* frame_get (enum palloc_flags f);
 void frame_install (void *kpage, void *upage, struct shareable_page *shpage);
+void frame_augment (struct frame_table_entry* fte, uint32_t *pd, void *upage);
 
 struct shareable_page* shareable_page_add (struct inode *file_inode, off_t offset);
+struct frame_table_entry *find_shareable_page (struct inode *file_inode, off_t offset);
 
 #endif /* vm/frame.h */

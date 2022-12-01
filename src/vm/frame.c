@@ -68,6 +68,7 @@ frame_install (void *kpage, void *upage, struct shareable_page *shpage)
       /* Initialise page_table_ref and add to list */
       struct page_table_ref *pgtr = malloc (sizeof (struct page_table_ref));
       if (!pgtr) {
+        lock_release (&frame_table_lock);
         PANIC ("Malloc failed for page table ref"); 
       }
       pgtr->pd = thread_current ()->pagedir;
@@ -94,6 +95,23 @@ frame_install (void *kpage, void *upage, struct shareable_page *shpage)
     }
 
   #endif
+}
+
+void
+frame_augment(struct frame_table_entry* fte, uint32_t *pd, void *upage)
+{
+  struct page_table_ref *ptr = malloc (sizeof (struct page_table_ref));
+  if (ptr)
+  {
+    ptr->pd = pd;
+    ptr->page = upage;
+
+    lock_acquire (&frame_table_lock);
+    list_push_back (&fte->page_table_refs, &ptr->elem);
+    lock_release (&frame_table_lock);
+  } else {
+    PANIC ("Malloc failed for page reference");
+  }
 }
 
 void*
@@ -296,6 +314,22 @@ shareable_page_add (struct inode *file_inode, off_t offset)
     hash_insert (&shareable_table, &shpage->elem);
     lock_release (&shareable_table_lock);
     return shpage;
+  }
+  else
+  {
+    return NULL;
+  }
+}
+
+/* If the page is sharable in the frame, return its frame table entry, NULL otherwise */
+struct frame_table_entry *
+find_shareable_page (struct inode *file_inode, off_t offset)
+{
+  struct shareable_page sp_aux = {.file_inode = file_inode, .offset = offset};
+  struct hash_elem *h = hash_find (&shareable_table, &sp_aux.elem);
+  if (h)
+  {
+    return hash_entry (h, struct shareable_page, elem)->frame;
   }
   else
   {
