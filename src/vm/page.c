@@ -42,9 +42,22 @@ spt_load_handler (struct sup_page_table *sp_table, void *fault_addr, uint32_t *p
   if (!spt_entry) 
     {
       return false;
+   }
+
+  /* if page is shareable, check if it is already in frame */
+  if (spt_entry->writable == false)
+  {
+    struct frame_table_entry *fte = find_shareable_page (file_get_inode (spt_entry->file), spt_entry->offset);
+    if (fte)
+    {
+      frame_augment (fte, pd, fault_addr);
+      pagedir_set_page (pd, fault_addr, fte->kpage, false);
+      pagedir_set_dirty (pd, fault_addr, false);
+      return true;
     }
-  
-   /* Get a frame for the page */
+  }
+
+  /* Get a frame for the page */
   void *kpage = frame_get (PAL_USER);
   if (!kpage)
     {
@@ -91,7 +104,7 @@ spt_load_handler (struct sup_page_table *sp_table, void *fault_addr, uint32_t *p
       frame_free (kpage); //TODO see above
       return false;
     }
-  spt_entry->type = PAGE_FRAME;
+  // spt_entry->type = PAGE_FRAME;
   spt_entry->kpage = kpage;
   frame_install (kpage, fault_addr, shpage);
   pagedir_set_dirty (pd, fault_addr, false);
