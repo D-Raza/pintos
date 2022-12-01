@@ -175,7 +175,8 @@ free_frame_table ()
   #endif
 }
 
-/* Frees reference from pd & upage to frame, if it was the last reference triggers freeing of entire entry */
+/* Frees reference from pd & upage to frame, if it was the last reference triggers freeing of entire entry
+   If upage is NULL free all references from pd */
 void
 frame_free_process (void *kpage, uint32_t *pd, void *upage)
 {
@@ -187,12 +188,19 @@ frame_free_process (void *kpage, uint32_t *pd, void *upage)
   for (e = list_begin (page_refs); e != list_end (page_refs); e = list_next (e))
   {
     pr = list_entry (e, struct page_table_ref, elem);
-    if (pr->pd == pd && pr->page == upage)
+    if (pr->pd == pd)
     {
-      pagedir_clear_page(pr->pd, pr->page);
-      list_remove (&pr->elem);
-      free (pr);
-      break;
+      void *old_page = pr->page;
+      if (upage == NULL || pr->page == upage)
+      {
+        pagedir_clear_page(pr->pd, pr->page);
+        list_remove (&pr->elem);
+        free (pr);
+	if (old_page == upage)
+	{
+	  break;
+	}
+      }
     }
   }
 
