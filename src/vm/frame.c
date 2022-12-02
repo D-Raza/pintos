@@ -251,7 +251,6 @@ frame_free (void *kpage)
                 struct page_table_ref *pr = list_entry 
                      (list_pop_front (prs), struct page_table_ref, elem);
                  pagedir_clear_page(pr->pd, pr->page);
-                 list_remove (&pr->elem);
                  free (pr);
               }
             /* Remove and free the corresponding shareable_page table entry, if existed */ 
