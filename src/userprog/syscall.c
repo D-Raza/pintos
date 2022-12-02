@@ -615,7 +615,6 @@ clean_mmap (struct mmap_file *entry)
     if (frame != NULL)
     {
       frame_free_process (frame, pd, i);
-      pagedir_clear_page (pd, i);
     }
     bool last = (i == entry->last_upage);
     spt_clear_entry (i, last);
