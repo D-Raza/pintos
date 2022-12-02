@@ -256,7 +256,9 @@ frame_free (void *kpage)
             /* Remove and free the corresponding shareable_page table entry, if existed */ 
             if (ft_entry->shpage)
             {
-              hash_delete (&shareable_table, &ft_entry->shpage->elem);
+              lock_acquire (&shareable_table_lock);
+	      hash_delete (&shareable_table, &ft_entry->shpage->elem);
+	      lock_release (&shareable_table_lock);
               free (ft_entry->shpage);
             }
             palloc_free_page (kpage);
@@ -343,14 +345,17 @@ shareable_page_add (struct inode *file_inode, off_t offset)
 struct frame_table_entry *
 find_shareable_page (struct inode *file_inode, off_t offset)
 {
+  lock_acquire (&shareable_table_lock);
   struct shareable_page sp_aux = {.file_inode = file_inode, .offset = offset};
   struct hash_elem *h = hash_find (&shareable_table, &sp_aux.elem);
   if (h)
   {
+    lock_release (&shareable_table_lock);
     return hash_entry (h, struct shareable_page, elem)->frame;
   }
   else
   {
+    lock_release (&shareable_table_lock);
     return NULL;
   }
 }
