@@ -180,6 +180,7 @@ free_frame_table ()
 void
 frame_free_process (void *kpage, uint32_t *pd, void *upage)
 {
+  lock_acquire (&frame_table_lock);
   struct frame_table_entry *ft_entry = find_frame (kpage);
   struct list *page_refs = &ft_entry->page_table_refs;
   struct list aux_list;
@@ -207,9 +208,16 @@ frame_free_process (void *kpage, uint32_t *pd, void *upage)
   page_refs->head = *list_head (&aux_list);
   page_refs->tail = *list_tail (&aux_list);
   
+
   if (list_empty (page_refs))
   {
+    lock_release (&frame_table_lock);
     frame_free (kpage);
+    return;
+  }
+  else
+  { 
+  lock_release (&frame_table_lock);
   }
 }
 
