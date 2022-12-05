@@ -249,7 +249,6 @@ process_exit (void)
 
   /* Free the supplemental page table and all frames held by the process */
   free_sp_table (cur->sup_page_table);
-  free_frame_table ();
   #endif
 
 
@@ -729,7 +728,9 @@ setup_stack (void **esp)
    KPAGE should probably be a page obtained from the user pool
    with palloc_get_page().
    Returns true on success, false if UPAGE is already mapped or
-   if memory allocation fails. */
+   if memory allocation fails. 
+   With VM only called for initial stack page */
+
 static bool
 install_page (void *upage, void *kpage, bool writable)
 {
@@ -742,7 +743,7 @@ install_page (void *upage, void *kpage, bool writable)
   
   #ifdef VM
   result &= spt_add_frame_page (t->sup_page_table, upage, kpage);
-  frame_install (kpage, upage);
+  frame_install (kpage, upage, NULL);
   #endif
 
   return result;
