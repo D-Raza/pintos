@@ -12,17 +12,25 @@
 /* The frame table */
 static struct hash frame_table;
 
+/* The table of shareable pages */
+static struct hash shareable_table;
+
 /* A circular list of used frames for eviction (Two-Handed clock algorithm) */
 static struct list used_frames_list; 
 static struct list_elem *examine_ptr;
 static struct list_elem *reset_ptr;
 
-/* Lock for the frame table */
+/* Locks for the frame table and table of shareable pages */
 static struct lock frame_table_lock;
+static struct lock shareable_table_lock;
 
 
 static unsigned frame_hash_hash_func (const struct hash_elem *h, void *aux UNUSED);
 static bool frame_hash_less_func (const struct hash_elem *h1_raw, const struct hash_elem *h2_raw, void *aux UNUSED);
+
+static unsigned shareable_hash_hash_func (const struct hash_elem *h, void *aux UNUSED);
+static bool shareable_hash_less_func (const struct hash_elem *h1_raw, const struct hash_elem *h2_raw, void *aux UNUSED);
+
 static struct frame_table_entry* find_frame (void *kpage);
 
 /* Initialises the frame table and associated structs. */
@@ -32,12 +40,14 @@ frame_init (void)
     hash_init (&frame_table, frame_hash_hash_func, frame_hash_less_func, NULL);
     list_init (&used_frames_list);
     lock_init (&frame_table_lock);
+    hash_init (&shareable_table, shareable_hash_hash_func, shareable_hash_less_func, NULL);
+    lock_init (&shareable_table_lock);
     // examine_ptr = list_begin (&used_frames_list);
     // reset_ptr = list_begin (&used_frames_list);
 }
 
 void 
-frame_install (void *kpage, void *upage)
+frame_install (void *kpage, void *upage, struct shareable_page *shpage)
 {
   #ifdef VM
 
@@ -51,12 +61,14 @@ frame_install (void *kpage, void *upage)
       /* Initialise frame table entry */
       fte->kpage = kpage;
       fte->upage = upage;
+      fte->shpage = shpage;
       list_init (&fte->page_table_refs);
       fte->evictable = false;
 
       /* Initialise page_table_ref and add to list */
       struct page_table_ref *pgtr = malloc (sizeof (struct page_table_ref));
       if (!pgtr) {
+        lock_release (&frame_table_lock);
         PANIC ("Malloc failed for page table ref"); 
       }
       pgtr->pd = thread_current ()->pagedir;
@@ -67,6 +79,14 @@ frame_install (void *kpage, void *upage)
       // pagedir_set_page (pgtr->pd, upage, kpage, writable);
       hash_insert (&frame_table, &fte->hash_elem);
       lock_release (&frame_table_lock);
+
+      /* If successful and shpage is set, add frame entry to shpage */
+      if (shpage)
+      {
+        lock_acquire (&shareable_table_lock);
+        shpage->frame = fte;
+        lock_release (&shareable_table_lock);
+      }
     } 
   else 
     {
@@ -75,6 +95,23 @@ frame_install (void *kpage, void *upage)
     }
 
   #endif
+}
+
+void
+frame_augment(struct frame_table_entry* fte, uint32_t *pd, void *upage)
+{
+  struct page_table_ref *ptr = malloc (sizeof (struct page_table_ref));
+  if (ptr)
+  {
+    ptr->pd = pd;
+    ptr->page = upage;
+
+    lock_acquire (&frame_table_lock);
+    list_push_back (&fte->page_table_refs, &ptr->elem);
+    lock_release (&frame_table_lock);
+  } else {
+    PANIC ("Malloc failed for page reference");
+  }
 }
 
 void*
@@ -100,7 +137,6 @@ frame_get (enum palloc_flags f)
       }
     #endif
 }
-
 
 /* Frees all frames from frame table belonging to a process */
 void
@@ -129,7 +165,7 @@ free_frame_table ()
 		      struct page_table_ref *pgt_ref = list_entry (pgtr, struct page_table_ref, elem);
 	              if (&pgt_ref->pd == t ->pagedir)
 		        {
-	                  frame_free (&fp -> kpage);
+	                  frame_free (&fp -> kpage); //TODO review if needs to change to frame_free_process
 	                }
 	            }
                 }
@@ -139,6 +175,55 @@ free_frame_table ()
   #endif
 }
 
+/* Frees reference from pd & upage to frame, if it was the last reference triggers freeing of entire entry
+   If upage is NULL free all references from pd */
+void
+frame_free_process (void *kpage, uint32_t *pd, void *upage)
+{
+  lock_acquire (&frame_table_lock);
+  struct frame_table_entry *ft_entry = find_frame (kpage);
+  struct list *page_refs = &ft_entry->page_table_refs;
+  struct list aux_list;
+  list_init (&aux_list);
+  struct list_elem *e;
+  struct page_table_ref *pr;
+
+  /* Every item of the list is either removed or added to the helper list */
+  while (!list_empty (page_refs))
+  {
+    e = list_pop_front (page_refs);
+    pr = list_entry (e, struct page_table_ref, elem);
+    if (pr->pd == pd && (upage == NULL || pr->page == upage))
+      {
+        pagedir_clear_page(pr->pd, pr->page);
+        free (pr);
+      }
+    else
+      {
+        list_push_back (&aux_list, e);
+      }
+  }
+  
+  /* The page_ref takes back all the left-over pages */
+  while (!list_empty (&aux_list))
+  {
+    e = list_pop_front (&aux_list);
+    list_push_back (page_refs, e);
+  }
+
+  if (list_empty (page_refs))
+  {
+    lock_release (&frame_table_lock);
+    frame_free (kpage);
+    return;
+  }
+  else
+  { 
+  lock_release (&frame_table_lock);
+  }
+}
+
+/* Destroys entire frame table entry corresponding to kpage */
 void 
 frame_free (void *kpage)
 {   
@@ -163,16 +248,21 @@ frame_free (void *kpage)
           {
             /* Clear the page table entries pointing to the frame and free the structs */
             struct list *prs = &ft_entry->page_table_refs;
-             while (!list_empty(prs))
-               {
-                 struct page_table_ref *pr = list_entry 
-                      (list_pop_front (prs), struct page_table_ref, elem);
-                  pagedir_clear_page(pr->pd, pr->page);
-                  list_remove (&pr->elem);
-                  free (pr);
-               }
-           
-            // list_remove (&fte_actual->list_elem); 
+            while (!list_empty(prs))
+              {
+                struct page_table_ref *pr = list_entry 
+                     (list_pop_front (prs), struct page_table_ref, elem);
+                 pagedir_clear_page(pr->pd, pr->page);
+                 free (pr);
+              }
+            /* Remove and free the corresponding shareable_page table entry, if existed */ 
+            if (ft_entry->shpage)
+            {
+              lock_acquire (&shareable_table_lock);
+	      hash_delete (&shareable_table, &ft_entry->shpage->elem);
+	      lock_release (&shareable_table_lock);
+              free (ft_entry->shpage);
+            }
             palloc_free_page (kpage);
             free (ft_entry);
           }
@@ -210,4 +300,64 @@ frame_hash_less_func (const struct hash_elem *h1_raw, const struct hash_elem *h2
     struct frame_table_entry *h1 = hash_entry (h1_raw, struct frame_table_entry, hash_elem);
     struct frame_table_entry *h2 = hash_entry (h2_raw, struct frame_table_entry, hash_elem);
     return h1->kpage < h2->kpage;
+}
+
+
+static unsigned
+shareable_hash_hash_func (const struct hash_elem *h, void *aux UNUSED)
+{
+  struct shareable_page *p = hash_entry (h, struct shareable_page, elem);
+  int64_t pair = ((((int64_t)(int32_t) (p->file_inode)) << 32) + p->offset);
+  return hash_bytes(&pair, 8);
+}
+
+
+static bool
+shareable_hash_less_func (const struct hash_elem *h1_raw, const struct hash_elem *h2_raw, void *aux UNUSED)
+{
+  struct shareable_page *p1 = hash_entry (h1_raw, struct shareable_page, elem);
+  struct shareable_page *p2 = hash_entry (h2_raw, struct shareable_page, elem);
+  int64_t pair1 = ((((int64_t)(int32_t) p1->file_inode) << 32) + p1->offset);
+  int64_t pair2 = ((((int64_t)(int32_t) p2->file_inode) << 32) + p2->offset);
+  return pair1 < pair2;
+}
+
+
+/* Makes entry in the shareable_pages_table */
+struct shareable_page* 
+shareable_page_add (struct inode *file_inode, off_t offset)
+{
+  struct shareable_page *shpage = malloc (sizeof (struct shareable_page));
+  if (shpage)
+  {
+    shpage->file_inode = file_inode;
+    shpage->offset = offset;
+    lock_acquire (&shareable_table_lock);
+    hash_insert (&shareable_table, &shpage->elem);
+    lock_release (&shareable_table_lock);
+    return shpage;
+  }
+  else
+  {
+    return NULL;
+  }
+}
+
+/* If the page is sharable in the frame, return its frame table entry, NULL otherwise */
+struct frame_table_entry *
+find_shareable_page (struct inode *file_inode, off_t offset)
+{
+  lock_acquire (&shareable_table_lock);
+  struct shareable_page sp_aux = {.file_inode = file_inode, .offset = offset};
+  struct hash_elem *h = hash_find (&shareable_table, &sp_aux.elem);
+  if (h)
+  {
+    lock_release (&shareable_table_lock);
+    return hash_entry (h, struct shareable_page, elem)->frame;
+  }
+  else
+  {
+    lock_release (&shareable_table_lock);
+    return NULL;
+  }
 }

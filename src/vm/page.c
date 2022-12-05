@@ -42,15 +42,31 @@ spt_load_handler (struct sup_page_table *sp_table, void *fault_addr, uint32_t *p
   if (!spt_entry) 
     {
       return false;
+   }
+
+  /* if page is shareable, check if it is already in frame */
+  if (spt_entry->writable == false)
+  {
+    file_sys_lock_acquire ();
+    struct inode *inode = file_get_inode (spt_entry->file);
+    file_sys_lock_release ();
+    struct frame_table_entry *fte = find_shareable_page (inode, spt_entry->offset);
+    if (fte)
+    {
+      frame_augment (fte, pd, fault_addr);
+      pagedir_set_page (pd, fault_addr, fte->kpage, false);
+      pagedir_set_dirty (pd, fault_addr, false);
+      return true;
     }
-  
-   /* Get a frame for the page */
+  }
+
+  /* Get a frame for the page */
   void *kpage = frame_get (PAL_USER);
   if (!kpage)
     {
       return false;
     }
-  
+  struct shareable_page *shpage = NULL;
   /* Load the page into the frame */
   bool writable = true;
   switch (spt_entry->type)
@@ -64,15 +80,22 @@ spt_load_handler (struct sup_page_table *sp_table, void *fault_addr, uint32_t *p
       case PAGE_EXEC:
         if (!spt_load_exec (spt_entry, kpage))
           {
-            frame_free (kpage);
+            //frame_free (kpage); //TODO review if necessary (load doesn't add to frame table)
             return false;
           }
         writable = spt_entry->writable;
+	if (!writable)
+	{
+          file_sys_lock_acquire ();
+          struct inode *inode = file_get_inode (spt_entry->file);
+          file_sys_lock_release ();
+	  shpage = shareable_page_add (inode, spt_entry->offset);
+	}
         break;
       case PAGE_MMAP:
         if (!spt_load_exec (spt_entry, kpage))
           {
-            frame_free (kpage);
+            //frame_free (kpage); //TODO see above
             return false;
 	  }
 	break;
@@ -83,12 +106,12 @@ spt_load_handler (struct sup_page_table *sp_table, void *fault_addr, uint32_t *p
     }
   if (!pagedir_set_page (pd, fault_addr, kpage, writable))
     {
-      frame_free (kpage);
+      //frame_free (kpage); //TODO see above
       return false;
     }
-  spt_entry->type = PAGE_FRAME;
-  spt_entry->kpage = kpage;
-  frame_install (kpage, fault_addr);
+  // spt_entry->type = PAGE_FRAME;
+  // spt_entry->kpage = kpage;
+  frame_install (kpage, fault_addr, shpage);
   pagedir_set_dirty (pd, fault_addr, false);
   return true;
 }
@@ -246,7 +269,7 @@ free_spt_entry (struct hash_elem *he, void *aux UNUSED)
           case PAGE_FRAME:
             if (spt_entry->kpage)
               {
-                frame_free (spt_entry->kpage);
+                //frame_free (spt_entry->kpage); //TODO Review PAGE_FRAME case possibly depreciated
               }
             break;
           default:
