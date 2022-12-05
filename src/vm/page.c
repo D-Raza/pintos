@@ -281,8 +281,7 @@ spt_clear_entry (void *upage, bool last)
 static bool 
 spt_load_exec (struct sup_page_table_entry *spt_entry, void *kpage)
 {
-  file_seek (spt_entry->file, spt_entry->offset);
-  if (file_read (spt_entry->file, kpage, spt_entry->read_bytes) != (int) spt_entry->read_bytes)
+  if (file_read_at (spt_entry->file, kpage, spt_entry->read_bytes, spt_entry->offset) != (int) spt_entry->read_bytes)
      {
        return false;
      }
