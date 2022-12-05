@@ -307,7 +307,7 @@ static unsigned
 shareable_hash_hash_func (const struct hash_elem *h, void *aux UNUSED)
 {
   struct shareable_page *p = hash_entry (h, struct shareable_page, elem);
-  int64_t pair = ((((int32_t)(p->file_inode)) << 8) + p->offset);
+  int64_t pair = ((((int64_t)(int32_t) (p->file_inode)) << 32) + p->offset);
   return hash_bytes(&pair, 8);
 }
 
@@ -317,8 +317,8 @@ shareable_hash_less_func (const struct hash_elem *h1_raw, const struct hash_elem
 {
   struct shareable_page *p1 = hash_entry (h1_raw, struct shareable_page, elem);
   struct shareable_page *p2 = hash_entry (h2_raw, struct shareable_page, elem);
-  int64_t pair1 = ((((int32_t) p1->file_inode) << 8) + p1->offset);
-  int64_t pair2 = ((((int32_t) p2->file_inode) << 8) + p2->offset);
+  int64_t pair1 = ((((int64_t)(int32_t) p1->file_inode) << 32) + p1->offset);
+  int64_t pair2 = ((((int64_t)(int32_t) p2->file_inode) << 32) + p2->offset);
   return pair1 < pair2;
 }
 
