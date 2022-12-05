@@ -47,7 +47,10 @@ spt_load_handler (struct sup_page_table *sp_table, void *fault_addr, uint32_t *p
   /* if page is shareable, check if it is already in frame */
   if (spt_entry->writable == false)
   {
-    struct frame_table_entry *fte = find_shareable_page (file_get_inode (spt_entry->file), spt_entry->offset);
+    file_sys_lock_acquire ();
+    struct inode *inode = file_get_inode (spt_entry->file);
+    file_sys_lock_release ();
+    struct frame_table_entry *fte = find_shareable_page (inode, spt_entry->offset);
     if (fte)
     {
       frame_augment (fte, pd, fault_addr);
@@ -83,7 +86,10 @@ spt_load_handler (struct sup_page_table *sp_table, void *fault_addr, uint32_t *p
         writable = spt_entry->writable;
 	if (!writable)
 	{
-	  shpage = shareable_page_add (file_get_inode (spt_entry->file), spt_entry->offset);
+          file_sys_lock_acquire ();
+          struct inode *inode = file_get_inode (spt_entry->file);
+          file_sys_lock_release ();
+	  shpage = shareable_page_add (inode, spt_entry->offset);
 	}
         break;
       case PAGE_MMAP:
@@ -92,7 +98,10 @@ spt_load_handler (struct sup_page_table *sp_table, void *fault_addr, uint32_t *p
             //frame_free (kpage); //TODO see above
             return false;
 	  }
-	shpage = shareable_page_add (file_get_inode (spt_entry->file), spt_entry->offset);
+        file_sys_lock_acquire ();
+        struct inode *inode = file_get_inode (spt_entry->file);
+        file_sys_lock_release ();
+	shpage = shareable_page_add (inode, spt_entry->offset);
 	break;
       case PAGE_FRAME:
         break;
