@@ -3,6 +3,7 @@
 #include "threads/malloc.h"
 #include "userprog/pagedir.h"
 #include "userprog/syscall.h"
+#include "devices/swap.h"
 #include <hash.h>
 #include <string.h>
 #include <stdio.h>
@@ -75,7 +76,7 @@ spt_load_handler (struct sup_page_table *sp_table, void *fault_addr, uint32_t *p
           spt_load_all_zero (kpage);
           break;
       case PAGE_SWAP:
-        PANIC ("PAGE_SWAP not implemented");
+        swap_in (kpage, spt_entry->swap_slot);
         break;
       case PAGE_EXEC:
         if (!spt_load_exec (spt_entry, kpage))
@@ -236,6 +237,24 @@ spt_add_frame_page (struct sup_page_table *sp_table, void *upage, void *kpage)
     {
       return false;
     }
+}
+
+bool 
+set_page_to_swap (struct sup_page_table *spt, void *upage, size_t swap_slot)
+{
+  struct sup_page_table_entry *spt_entry = find_spte (spt, upage);
+  if (spt_entry)
+    {
+      spt_entry->type = PAGE_SWAP;
+      spt_entry->swap_slot = swap_slot;
+      spt_entry->kpage = NULL;
+      return true;
+    }
+  else 
+    {
+      return false;
+    }
+
 }
 
 /* Frees a supplemental page table. */

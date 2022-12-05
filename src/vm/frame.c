@@ -7,6 +7,8 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "userprog/pagedir.h"
+#include "devices/swap.h"
+#include <stdio.h>
 
 
 /* The frame table */
@@ -65,6 +67,7 @@ frame_install (void *kpage, void *upage, struct shareable_page *shpage)
       fte->shpage = shpage;
       list_init (&fte->page_table_refs);
       fte->evictable = false;
+      fte->t = thread_current ();
 
       /* Initialise page_table_ref and add to list */
       struct page_table_ref *pgtr = malloc (sizeof (struct page_table_ref));
@@ -130,10 +133,29 @@ frame_get (enum palloc_flags f)
         /* Evict a page if there are no more pages */
         /* For now panic kernel */
         /* TODO: Eviction */
-        frame_free (get_evictee_random ()->kpage);
+
+        struct frame_table_entry *evictee = get_evictee_random ();
+
+        ASSERT (evictee);
+
+        pagedir_clear_page (evictee->t->pagedir, evictee->upage);
+
+        size_t swap_slot = swap_out (evictee->kpage);
+
+        printf("\n swap_out success \n");
+
+        bool x = set_page_to_swap (evictee->t->sup_page_table, evictee->upage, swap_slot);
+
+        printf("\n set_page_to_swap success, bool x: %d \n", x);
+
+        frame_free (evictee->kpage);
+
+        printf("\n frame_free success \n");
+
         kpage = palloc_get_page (PAL_USER | f);
         ASSERT (kpage != NULL);
       }
+    
     return kpage;
     #endif
 }

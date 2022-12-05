@@ -63,12 +63,20 @@ swap_out (const void *vaddr)
 void
 swap_in (void *vaddr, size_t slot) 
 {
+
+  printf ("\n swap_in start\n");
   // calculate block sector from swap-slot number
   size_t sector = slot * PAGE_SECTORS;
 
+  printf("\n sector \n");
+
   // loop over each sector of the page, copying it from swap into memory
   for (size_t i = 0; i < PAGE_SECTORS; i++)
-    block_read (swap_device, sector + i, vaddr + i * BLOCK_SECTOR_SIZE);
+    {
+      block_read (swap_device, sector + i, vaddr + i * BLOCK_SECTOR_SIZE);
+    }
+    
+  printf("\n block_reads done \n");
   
   // clear the swap-slot previously used by this page
   swap_drop (slot);

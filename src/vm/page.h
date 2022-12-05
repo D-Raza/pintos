@@ -30,7 +30,7 @@ struct sup_page_table_entry
     off_t offset;                  /* Offset */
 
     /* For PAGE_SWAP */
-    // TODO:
+    size_t swap_slot ;             /* Swap slot */
 };
 
 struct sup_page_table 
@@ -54,5 +54,6 @@ void free_sp_table (struct sup_page_table *sp_table);
 void free_mmap_table (struct mmaped_files_table *mmap_table);
 bool spt_clear_entry (void *upage, bool last);
 bool spt_save_page (uint32_t *pd, void *upage);
+bool set_page_to_swap (struct sup_page_table *sp_table, void *upage, size_t swap_slot);
 
 #endif /* vm/page.h */
