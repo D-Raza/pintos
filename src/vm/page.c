@@ -98,10 +98,6 @@ spt_load_handler (struct sup_page_table *sp_table, void *fault_addr, uint32_t *p
             //frame_free (kpage); //TODO see above
             return false;
 	  }
-        file_sys_lock_acquire ();
-        struct inode *inode = file_get_inode (spt_entry->file);
-        file_sys_lock_release ();
-	shpage = shareable_page_add (inode, spt_entry->offset);
 	break;
       case PAGE_FRAME:
         break;
