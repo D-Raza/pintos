@@ -24,6 +24,7 @@ static struct lock frame_table_lock;
 static unsigned frame_hash_hash_func (const struct hash_elem *h, void *aux UNUSED);
 static bool frame_hash_less_func (const struct hash_elem *h1_raw, const struct hash_elem *h2_raw, void *aux UNUSED);
 static struct frame_table_entry* find_frame (void *kpage);
+static struct frame_table_entry* get_evictee_random (void);
 
 /* Initialises the frame table and associated structs. */
 void
@@ -92,12 +93,11 @@ frame_get (enum palloc_flags f)
         /* Evict a page if there are no more pages */
         /* For now panic kernel */
         /* TODO: Eviction */
-        PANIC ("No more memory pages");
+        frame_free (get_evictee_random ()->kpage);
+        kpage = palloc_get_page (PAL_USER | f);
+        ASSERT (kpage != NULL);
       }
-    else
-      {
-        return kpage;
-      }
+    return kpage;
     #endif
 }
 
@@ -180,6 +180,26 @@ frame_free (void *kpage)
     /* Release the lock */
     lock_release (&frame_table_lock);
     #endif
+}
+
+static struct frame_table_entry*
+get_evictee_random (void)
+{
+  struct frame_table_entry *ft_entry = NULL;
+
+  struct hash_iterator i;
+  hash_first (&i, &frame_table);
+  while (hash_next (&i))
+    {
+      struct hash_elem *he = hash_cur (&i);
+      struct frame_table_entry *fte = hash_entry (he, struct frame_table_entry, hash_elem);
+      if (fte)
+        {
+          ft_entry = fte;
+          break;
+        }
+    }
+  return ft_entry;
 }
 
 static struct frame_table_entry*
