@@ -207,7 +207,7 @@ frame_free_process (void *kpage, uint32_t *pd, void *upage)
   /* The page_ref takes back all the left-over pages */
   while (!list_empty (&aux_list))
   {
-    e = list_pop_front (page_refs);
+    e = list_pop_front (&aux_list);
     list_push_back (page_refs, e);
   }
 
