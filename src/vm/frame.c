@@ -138,43 +138,6 @@ frame_get (enum palloc_flags f)
     #endif
 }
 
-/* Frees all frames from frame table belonging to a process */
-void
-free_frame_table ()
-{
-  #ifdef userprog
-  struct thread *t = thread_current ();
-  struct hash *ftPointer = &frame_table;
-  if (ftPointer)
-    {
-      for (int i = 0; i < (int) ftPointer->bucket_cnt; i++)
-        {
-          struct list *bucket = &ftPointer->buckets[i];
-          struct list_elem *elem, *next;
-          for (elem = list_begin (bucket);
-              elem != list_end (bucket); elem = next)
-            {
-	      struct frame_table_entry *fp = list_entry (elem, struct frame_table_entry, list_elem);
-	      struct hash_elem *table_entry = list_entry(elem, struct hash_elem, list_elem);
-	      if (table_entry != NULL)
-	        {
-	          struct list *pgtrs = &fp -> page_table_refs;
-	          struct list_elem *pgtr, *pgtr_next;
-	          for (pgtr = list_begin (pgtrs); pgtr != list_end (pgtrs); pgtr = pgtr_next)
-	            {
-		      struct page_table_ref *pgt_ref = list_entry (pgtr, struct page_table_ref, elem);
-	              if (&pgt_ref->pd == t ->pagedir)
-		        {
-	                  frame_free (&fp -> kpage); //TODO review if needs to change to frame_free_process
-	                }
-	            }
-                }
-	     }
-        }
-     }
-  #endif
-}
-
 /* Frees reference from pd & upage to frame, if it was the last reference triggers freeing of entire entry
    If upage is NULL free all references from pd */
 void
