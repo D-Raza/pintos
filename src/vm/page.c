@@ -118,36 +118,6 @@ spt_load_handler (struct sup_page_table *sp_table, void *fault_addr, uint32_t *p
 
 /* Adds a page from an executable file to the supplementary page table. 
    Returns true if successful, false otherwise. */
-bool 
-spt_add_exec_page (struct sup_page_table *sp_table, void *upage, bool writable, struct file *file, off_t ofs, uint32_t read_bytes, uint32_t zero_bytes)
-{
-  struct sup_page_table_entry *spt_entry = malloc (sizeof (struct sup_page_table_entry));
-  if (spt_entry)
-    {
-      spt_entry->type = PAGE_EXEC;
-      spt_entry->upage = upage; 
-      spt_entry->file = file;
-      spt_entry->offset = ofs; 
-      spt_entry->read_bytes = read_bytes;
-      spt_entry->zero_bytes = zero_bytes;
-      spt_entry->writable = writable;
-
-      struct hash_elem *h = hash_insert (&sp_table->hash_spt_table, &spt_entry->hash_elem);
-      if (!h)
-        {
-          return true;
-        }
-      else 
-        {
-          free (spt_entry);
-          return false;
-        }
-    }
-  else 
-    {
-      return false;
-    }
-}
 
 bool spt_add_all_zero_page (struct sup_page_table *sp_table, void *upage)
 {
@@ -176,16 +146,20 @@ bool spt_add_all_zero_page (struct sup_page_table *sp_table, void *upage)
 }
 
 bool
-spt_add_mmap_page (struct sup_page_table *sp_table, void *upage, bool writable, struct file *file, off_t ofs, uint32_t read_bytes, uint32_t zero_bytes)
+spt_add_file (struct sup_page_table *sp_table, void *upage, bool writable, struct file *file, off_t ofs, uint32_t read_bytes, uint32_t zero_bytes, enum page_type entry_type)
 {
   struct sup_page_table_entry *spt_entry = malloc (sizeof (struct sup_page_table_entry));
   if (spt_entry)
     {
-      spt_entry->type = PAGE_MMAP;
+      spt_entry->type = entry_type;
       spt_entry->upage = upage;
-      file_sys_lock_acquire ();
-      spt_entry->file = file_reopen (file);
-      file_sys_lock_release ();
+      if (entry_type == PAGE_MMAP){
+	file_sys_lock_acquire ();
+        spt_entry->file = file_reopen (file);
+        file_sys_lock_release ();
+      } else {
+	spt_entry->file = file;
+      }
       spt_entry->offset = ofs;
       spt_entry->read_bytes = read_bytes;
       spt_entry->zero_bytes = zero_bytes;
@@ -202,7 +176,7 @@ spt_add_mmap_page (struct sup_page_table *sp_table, void *upage, bool writable, 
           return false;
         }
     }
-  else 
+  else
     {
       return false;
     }

@@ -45,8 +45,7 @@ struct mmaped_files_table
 
 struct sup_page_table *sup_page_table_create (void);
 struct mmaped_files_table *mmaped_files_table_create (void);
-bool spt_add_exec_page (struct sup_page_table *sp_table, void *upage, bool writable, struct file *file, off_t ofs, uint32_t read_bytes, uint32_t zero_bytes);
-bool spt_add_mmap_page (struct sup_page_table *sp_table, void *upage, bool writable, struct file *file, off_t ofs, uint32_t read_bytes, uint32_t zero_bytes);
+bool spt_add_file (struct sup_page_table *sp_table, void *upage, bool writable, struct file *file, off_t ofs, uint32_t read_bytes, uint32_t zero_bytes, enum page_type entry_type);
 bool spt_add_frame_page (struct sup_page_table *sp_table, void *upage, void *page);
 bool spt_add_all_zero_page (struct sup_page_table *sp_table, void *upage);
 bool spt_load_handler (struct sup_page_table *sp_table, void *fault_addr, uint32_t *pd);

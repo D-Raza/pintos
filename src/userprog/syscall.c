@@ -574,7 +574,7 @@ sys_mmap (int args[])
     size_t page_read_bytes = file_size < PGSIZE ? file_size : PGSIZE;
     size_t page_zero_bytes = PGSIZE - page_read_bytes;
    
-    success &= spt_add_mmap_page (t->sup_page_table, upage, true, fd_file, ofs, page_read_bytes, page_zero_bytes);
+    success &= spt_add_file (t->sup_page_table, upage, true, fd_file, ofs, page_read_bytes, page_zero_bytes, PAGE_MMAP);
     upage = (void *) ((int) upage + PGSIZE);
     ofs =+ PGSIZE;
     file_size -= PGSIZE;

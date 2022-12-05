@@ -640,7 +640,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       hash_delete (&(t->sup_page_table->hash_spt_table), &(spte_aux.hash_elem));
 
 
-      bool result = spt_add_exec_page (t->sup_page_table, upage, writable, file, ofs, page_read_bytes, page_zero_bytes);
+      bool result = spt_add_file (t->sup_page_table, upage, writable, file, ofs, page_read_bytes, page_zero_bytes, PAGE_EXEC);
       if (!result)
         {
           return false;
