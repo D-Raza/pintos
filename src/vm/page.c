@@ -281,7 +281,16 @@ spt_clear_entry (void *upage, bool last)
 static bool 
 spt_load_exec (struct sup_page_table_entry *spt_entry, void *kpage)
 {
-  if (file_read_at (spt_entry->file, kpage, spt_entry->read_bytes, spt_entry->offset) != (int) spt_entry->read_bytes)
+  off_t offt;
+  bool previously_held = lock_held_by_current_thread (&file_sys_lock);
+  if (!previously_held){
+    file_sys_lock_acquire ();
+    offt = file_read_at (spt_entry->file, kpage, spt_entry->read_bytes, spt_entry->offset);
+    file_sys_lock_release ();
+  } else {
+    offt = file_read_at (spt_entry->file, kpage, spt_entry->read_bytes, spt_entry->offset);
+  }
+  if (offt != (int) spt_entry->read_bytes)
      {
        return false;
      }
