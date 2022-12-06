@@ -37,8 +37,6 @@ struct shareable_page
     struct frame_table_entry *frame; /* Pointer to the corresponding frame table entry */
 };
 
-struct list frame_table_entries_list;
-
 void frame_init (void);
 
 void frame_free_process (void *kpage, uint32_t *pd, void *upage);

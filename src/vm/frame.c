@@ -13,6 +13,9 @@
 /* The frame table */
 static struct hash frame_table;
 
+/* List containing all frame table entries (used for eviction) */
+struct list frame_table_entries_list;
+
 /* The table of shareable pages */
 static struct hash shareable_table;
 
@@ -223,6 +226,9 @@ frame_free (void *kpage)
 
     if (ft_entry)
       {
+        /* Delete the entry from the frame_table_entries_list */  
+        list_remove (&ft_entry->list_elem);
+
         /* Delete the entry from the frame table */
         struct hash_elem *he = hash_delete (&frame_table, &ft_entry->hash_elem);
         if (he)
@@ -240,8 +246,8 @@ frame_free (void *kpage)
             if (ft_entry->shpage)
             {
               lock_acquire (&shareable_table_lock);
-	      hash_delete (&shareable_table, &ft_entry->shpage->elem);
-	      lock_release (&shareable_table_lock);
+	            hash_delete (&shareable_table, &ft_entry->shpage->elem);
+	            lock_release (&shareable_table_lock);
               free (ft_entry->shpage);
             }
             palloc_free_page (kpage);
