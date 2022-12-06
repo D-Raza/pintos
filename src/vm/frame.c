@@ -146,34 +146,22 @@ frame_free_process (void *kpage, uint32_t *pd, void *upage)
   lock_acquire (&frame_table_lock);
   struct frame_table_entry *ft_entry = find_frame (kpage);
   struct list *page_refs = &ft_entry->page_table_refs;
-  struct list aux_list;
-  list_init (&aux_list);
   struct list_elem *e;
   struct page_table_ref *pr;
 
-  /* Every item of the list is either removed or added to the helper list */
-  while (!list_empty (page_refs))
+  e = list_begin (page_refs);
+  while (e != list_end (page_refs))
   {
-    e = list_pop_front (page_refs);
     pr = list_entry (e, struct page_table_ref, elem);
+    e = list_next (e);
     if (pr->pd == pd && (upage == NULL || pr->page == upage))
       {
         pagedir_clear_page(pr->pd, pr->page);
+        list_remove (&pr->elem);
         free (pr);
-      }
-    else
-      {
-        list_push_back (&aux_list, e);
       }
   }
   
-  /* The page_ref takes back all the left-over pages */
-  while (!list_empty (&aux_list))
-  {
-    e = list_pop_front (&aux_list);
-    list_push_back (page_refs, e);
-  }
-
   if (list_empty (page_refs))
   {
     lock_release (&frame_table_lock);
