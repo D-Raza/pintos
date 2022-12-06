@@ -366,3 +366,40 @@ find_shareable_page (struct inode *file_inode, off_t offset)
     return NULL;
   }
 }
+
+static struct frame_table_entry*
+get_evictee (void)
+{
+  struct frame_table_entry *curr_fte;
+  struct frame_table_entry *fte_to_evict = NULL;
+ 
+  /* Search through the used frames list till a page with a 0 accessed bit is found */
+  struct list_elem *curr_used_frames_list_elem = list_head(&used_frames_list);
+  while ((curr_used_frames_list_elem = list_next(curr_used_frames_list_elem)) != list_tail (&used_frames_list))
+  {
+  curr_fte = list_entry(curr_used_frames_list_elem, struct frame_table_entry, list_elem);
+
+  if (pagedir_is_accessed(curr_fte->t->pagedir, curr_fte->upage))
+  {
+  pagedir_set_accessed(curr_fte->t->pagedir, curr_fte->upage, false);
+  }
+  else
+  {
+  /* A page with accessed bit 0 is found */
+  fte_to_evict = curr_fte;
+  list_remove(curr_used_frames_list_elem);
+  list_push_back(&used_frames_list, curr_used_frames_list_elem);
+  break;
+  }
+  }
+
+  if (fte_to_evict == NULL)
+  {
+  /* No pages with access bit 0 is found */
+
+  }
+
+  ASSERT(fte_to_evict != NULL);
+ 
+  return fte_to_evict;
+}
