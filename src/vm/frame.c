@@ -54,7 +54,7 @@ frame_install (void *kpage, void *upage, struct shareable_page *shpage)
 
   lock_acquire (&frame_table_lock);
   /* Add entry to the frame table */
-  // void *kpage = frame_get (f);
+  // void *kpage = frame_get (f);ƒ
   struct frame_table_entry *fte = malloc (sizeof (struct frame_table_entry));
 
   if (fte)
@@ -133,23 +133,16 @@ frame_get (enum palloc_flags f)
         /* For now panic kernel */
         /* TODO: Eviction */
 
+        // get the length of the frame table
+        int frame_table_length = hash_size (&frame_table);
+
         struct frame_table_entry *evictee = get_evictee_random ();
-
-        ASSERT (evictee);
-
-        pagedir_clear_page (evictee->t->pagedir, evictee->upage);
 
         size_t swap_slot = swap_out (evictee->kpage);
 
-        printf("\n swap_out success \n");
-
         bool x = set_page_to_swap (evictee->t->sup_page_table, evictee->upage, swap_slot);
 
-        printf("\n set_page_to_swap success, bool x: %d \n", x);
-
         frame_free (evictee->kpage);
-
-        printf("\n frame_free success \n");
 
         kpage = palloc_get_page (PAL_USER | f);
         ASSERT (kpage != NULL);
@@ -265,6 +258,7 @@ get_evictee_random (void)
   struct frame_table_entry *ft_entry = NULL;
 
   struct hash_iterator i;
+
   hash_first (&i, &frame_table);
   while (hash_next (&i))
     {
