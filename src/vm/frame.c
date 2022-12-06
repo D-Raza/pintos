@@ -39,6 +39,7 @@ frame_init (void)
     lock_init (&frame_table_lock);
     hash_init (&shareable_table, shareable_hash_hash_func, shareable_hash_less_func, NULL);
     lock_init (&shareable_table_lock);
+    list_init(&frame_table_entries_list);
     // examine_ptr = list_begin (&used_frames_list);
     // reset_ptr = list_begin (&used_frames_list);
 }
@@ -73,9 +74,10 @@ frame_install (void *kpage, void *upage, struct shareable_page *shpage)
       pgtr->page = upage;
       list_push_back (&fte->page_table_refs, &pgtr->elem);
 
-      /* Add entries to page table and frame table*/
+      /* Add entries to frame table and frame table entries list */
       // pagedir_set_page (pgtr->pd, upage, kpage, writable);
       hash_insert (&frame_table, &fte->hash_elem);
+      list_push_back(&frame_table_entries_list, &fte->list_elem);
       lock_release (&frame_table_lock);
 
       /* If successful and shpage is set, add frame entry to shpage */
