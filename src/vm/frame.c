@@ -35,6 +35,7 @@ static bool shareable_hash_less_func (const struct hash_elem *h1_raw, const stru
 
 static struct frame_table_entry* find_frame (void *kpage);
 static struct frame_table_entry* get_evictee_random (void);
+static struct frame_table_entry* get_evictee (void);
 
 /* Initialises the frame table and associated structs. */
 void
