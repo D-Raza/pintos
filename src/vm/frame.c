@@ -133,10 +133,11 @@ frame_get (enum palloc_flags f)
         /* For now panic kernel */
         /* TODO: Eviction */
 
-        // get the length of the frame table
-        int frame_table_length = hash_size (&frame_table);
+        lock_acquire (&frame_table_lock);
+        struct frame_table_entry *evictee = get_evictee ();
+        lock_release (&frame_table_lock);
 
-        struct frame_table_entry *evictee = get_evictee_random ();
+        ASSERT(evictee);
 
         size_t swap_slot = swap_out (evictee->kpage);
 
@@ -220,7 +221,7 @@ frame_free (void *kpage)
     if (ft_entry)
       {
         /* Delete the entry from the frame_table_entries_list */  
-        list_remove (&ft_entry->list_elem);
+        //list_remove (&ft_entry->list_elem);
 
         /* Delete the entry from the frame table */
         struct hash_elem *he = hash_delete (&frame_table, &ft_entry->hash_elem);
@@ -367,36 +368,41 @@ static struct frame_table_entry*
 get_evictee (void)
 {
   struct frame_table_entry *curr_fte;
-  struct frame_table_entry *evictee = NULL;
+  struct frame_table_entry *evictee;
  
   /* Search through the used frames list till a page with a 0 accessed bit is found */
-  struct list_elem *curr_used_frames_list_elem = list_head(&frame_table_entries_list);
-  while ((curr_used_frames_list_elem = list_next(curr_used_frames_list_elem)) != list_tail (&frame_table_entries_list))
+  int n = (int) list_size (&frame_table_entries_list);
+  for (int i = 0; i < (3 * n); i++)    // (curr_used_frames_list_elem = list_next(curr_used_frames_list_elem)) != list_tail (&frame_table_entries_list))
   {
-    curr_fte = list_entry(curr_used_frames_list_elem, struct frame_table_entry, list_elem);
+    curr_fte = list_entry (list_pop_front (&frame_table_entries_list), struct frame_table_entry, list_elem);
+    ASSERT (curr_fte != NULL);
 
     if (pagedir_is_accessed(curr_fte->t->pagedir, curr_fte->upage))
     {
       pagedir_set_accessed(curr_fte->t->pagedir, curr_fte->upage, false);
+      list_push_back(&frame_table_entries_list, &curr_fte->list_elem);
+      continue;
     }
     else
     {
+      printf ("\n REACHES GOOD CASE");
+      printf("\n i = %d, n = %d", i, n);
       /* A page with accessed bit 0 is found */
+      return curr_fte;
       evictee = curr_fte;
       /* Most recent frame being at the back of the list is maintained */
-      list_remove(curr_used_frames_list_elem);
-      list_push_back(&frame_table_entries_list, curr_used_frames_list_elem);
       break;
     }
   }
 
   if (evictee == NULL)
   {
+    printf ("\n REACHING NULL EVICTEE CASE");
     /* Since no pages with access bit 0 is found, clear the oldest element */
     evictee = list_entry(list_begin(&frame_table_entries_list), struct frame_table_entry, list_elem);
   }
 
-  ASSERT(evictee != NULL);
- 
+  ASSERT(evictee);
+  return list_entry(list_begin(&frame_table_entries_list), struct frame_table_entry, list_elem); 
   return evictee;
 }
