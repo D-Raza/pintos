@@ -370,7 +370,7 @@ static struct frame_table_entry*
 get_evictee (void)
 {
   struct frame_table_entry *curr_fte;
-  struct frame_table_entry *fte_to_evict = NULL;
+  struct frame_table_entry *evictee = NULL;
  
   /* Search through the used frames list till a page with a 0 accessed bit is found */
   struct list_elem *curr_used_frames_list_elem = list_head(&used_frames_list);
@@ -385,20 +385,20 @@ get_evictee (void)
   else
   {
   /* A page with accessed bit 0 is found */
-  fte_to_evict = curr_fte;
+  evictee = curr_fte;
   list_remove(curr_used_frames_list_elem);
   list_push_back(&used_frames_list, curr_used_frames_list_elem);
   break;
   }
   }
 
-  if (fte_to_evict == NULL)
+  if (evictee == NULL)
   {
-  /* No pages with access bit 0 is found */
-
+    /* Since no pages with access bit 0 is found, clear the oldest element */
+    evictee = list_entry(list_begin(&used_frames_list), struct frame_table_entry, list_elem);
   }
 
-  ASSERT(fte_to_evict != NULL);
+  ASSERT(evictee != NULL);
  
-  return fte_to_evict;
+  return evictee;
 }
