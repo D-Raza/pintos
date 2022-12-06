@@ -19,8 +19,6 @@ static struct hash shareable_table;
 
 /* A circular list of used frames for eviction (Two-Handed clock algorithm) */
 static struct list used_frames_list; 
-static struct list_elem *examine_ptr;
-static struct list_elem *reset_ptr;
 
 /* Locks for the frame table and table of shareable pages */
 static struct lock frame_table_lock;
