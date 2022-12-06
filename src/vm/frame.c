@@ -10,15 +10,11 @@
 #include "devices/swap.h"
 #include <stdio.h>
 
-
 /* The frame table */
 static struct hash frame_table;
 
 /* The table of shareable pages */
 static struct hash shareable_table;
-
-/* A circular list of used frames for eviction (Two-Handed clock algorithm) */
-static struct list used_frames_list; 
 
 /* Locks for the frame table and table of shareable pages */
 static struct lock frame_table_lock;
@@ -40,7 +36,6 @@ void
 frame_init (void)
 {   
     hash_init (&frame_table, frame_hash_hash_func, frame_hash_less_func, NULL);
-    list_init (&used_frames_list);
     lock_init (&frame_table_lock);
     hash_init (&shareable_table, shareable_hash_hash_func, shareable_hash_less_func, NULL);
     lock_init (&shareable_table_lock);
@@ -373,29 +368,30 @@ get_evictee (void)
   struct frame_table_entry *evictee = NULL;
  
   /* Search through the used frames list till a page with a 0 accessed bit is found */
-  struct list_elem *curr_used_frames_list_elem = list_head(&used_frames_list);
-  while ((curr_used_frames_list_elem = list_next(curr_used_frames_list_elem)) != list_tail (&used_frames_list))
+  struct list_elem *curr_used_frames_list_elem = list_head(&frame_table_entries_list);
+  while ((curr_used_frames_list_elem = list_next(curr_used_frames_list_elem)) != list_tail (&frame_table_entries_list))
   {
-  curr_fte = list_entry(curr_used_frames_list_elem, struct frame_table_entry, list_elem);
+    curr_fte = list_entry(curr_used_frames_list_elem, struct frame_table_entry, list_elem);
 
-  if (pagedir_is_accessed(curr_fte->t->pagedir, curr_fte->upage))
-  {
-  pagedir_set_accessed(curr_fte->t->pagedir, curr_fte->upage, false);
-  }
-  else
-  {
-  /* A page with accessed bit 0 is found */
-  evictee = curr_fte;
-  list_remove(curr_used_frames_list_elem);
-  list_push_back(&used_frames_list, curr_used_frames_list_elem);
-  break;
-  }
+    if (pagedir_is_accessed(curr_fte->t->pagedir, curr_fte->upage))
+    {
+      pagedir_set_accessed(curr_fte->t->pagedir, curr_fte->upage, false);
+    }
+    else
+    {
+      /* A page with accessed bit 0 is found */
+      evictee = curr_fte;
+      /* Most recent frame being at the back of the list is maintained */
+      list_remove(curr_used_frames_list_elem);
+      list_push_back(&frame_table_entries_list, curr_used_frames_list_elem);
+      break;
+    }
   }
 
   if (evictee == NULL)
   {
     /* Since no pages with access bit 0 is found, clear the oldest element */
-    evictee = list_entry(list_begin(&used_frames_list), struct frame_table_entry, list_elem);
+    evictee = list_entry(list_begin(&frame_table_entries_list), struct frame_table_entry, list_elem);
   }
 
   ASSERT(evictee != NULL);
