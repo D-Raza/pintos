@@ -385,8 +385,6 @@ get_evictee (void)
     }
     else
     {
-      printf ("\n REACHES GOOD CASE");
-      printf("\n i = %d, n = %d", i, n);
       /* A page with accessed bit 0 is found */
       return curr_fte;
       evictee = curr_fte;
@@ -397,7 +395,6 @@ get_evictee (void)
 
   if (evictee == NULL)
   {
-    printf ("\n REACHING NULL EVICTEE CASE");
     /* Since no pages with access bit 0 is found, clear the oldest element */
     evictee = list_entry(list_begin(&frame_table_entries_list), struct frame_table_entry, list_elem);
   }
