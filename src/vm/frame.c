@@ -233,8 +233,16 @@ frame_free (void *kpage)
 
     if (ft_entry)
       {
-        /* Delete the entry from the frame_table_entries_list */  
-        list_remove (&ft_entry->list_elem);
+        if (!pagedir_is_writable(ft_entry->t->pagedir, ft_entry->upage))
+        {
+          /* If fte contains read-only page, add it to read_only_page_fte_list */
+          list_remove (&ft_entry->list_elem);
+        }
+        else
+        {
+          /* If fte contains writable page, add it to writable_page_fte_list */
+          list_remove (&ft_entry->list_elem);
+        }
 
         /* Delete the entry from the frame table */
         struct hash_elem *he = hash_delete (&frame_table, &ft_entry->hash_elem);
