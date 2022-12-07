@@ -144,14 +144,23 @@ frame_get (enum palloc_flags f)
     if (kpage == NULL) 
       {
         /* Evict a page if there are no more pages */
-        /* For now panic kernel */
-        /* TODO: Eviction */
 
         lock_acquire (&frame_table_lock);
         struct frame_table_entry *evictee = get_evictee ();
         lock_release (&frame_table_lock);
 
-        ASSERT(evictee);
+        if (!pagedir_is_writable(evictee->t->pagedir, evictee->upage) || !pagedir_is_dirty(evictee->t->pagedir, evictee->upage)) 
+        {
+          /* TODO: frame_free*/
+        } 
+        else if (pagedir_is_dirty(evictee->t->pagedir, evictee->upage) /* && is mmap file */) 
+        {
+          /* TODO: write back to file and free */
+        } 
+        else 
+        {
+          /* TODO: write to swap */
+        }
 
         size_t swap_slot = swap_out (evictee->kpage);
 
@@ -418,6 +427,7 @@ find_evictee (struct list *frame_table_entries_list)
       return curr_fte;
     }
   }
+
   if (evictee == NULL)
   {
     /* Since no pages with access bit 0 is found, clear the oldest element */
