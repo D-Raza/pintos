@@ -13,9 +13,6 @@
 /* The frame table */
 static struct hash frame_table;
 
-/* List containing all frame table entries (used for eviction) */
-struct list frame_table_entries_list;
-
 /* List containing all frame table entries that have read-only page (used for eviction) */
 struct list read_only_page_fte_list;
 
@@ -48,7 +45,6 @@ frame_init (void)
     lock_init (&frame_table_lock);
     hash_init (&shareable_table, shareable_hash_hash_func, shareable_hash_less_func, NULL);
     lock_init (&shareable_table_lock);
-    list_init(&frame_table_entries_list);
     list_init(&read_only_page_fte_list);
     list_init(&writable_page_fte_list);
 }
@@ -98,7 +94,6 @@ frame_install (void *kpage, void *upage, struct shareable_page *shpage)
         list_push_back(&writable_page_fte_list, &fte->list_elem);
       }
 
-      list_push_back(&frame_table_entries_list, &fte->list_elem);
       lock_release (&frame_table_lock);
 
       /* If successful and shpage is set, add frame entry to shpage */
@@ -240,8 +235,6 @@ frame_free (void *kpage)
       {
         /* Delete the entry from the frame_table_entries_list */  
         list_remove (&ft_entry->list_elem);
-
-
 
         /* Delete the entry from the frame table */
         struct hash_elem *he = hash_delete (&frame_table, &ft_entry->hash_elem);
