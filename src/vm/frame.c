@@ -221,7 +221,7 @@ frame_free (void *kpage)
     if (ft_entry)
       {
         /* Delete the entry from the frame_table_entries_list */  
-        //list_remove (&ft_entry->list_elem);
+        list_remove (&ft_entry->list_elem);
 
         /* Delete the entry from the frame table */
         struct hash_elem *he = hash_delete (&frame_table, &ft_entry->hash_elem);
