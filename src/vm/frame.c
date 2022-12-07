@@ -453,6 +453,5 @@ get_evictee (void)
   }
 
   ASSERT(evictee);
-  return list_entry(list_begin(&writable_page_fte_list), struct frame_table_entry, list_elem);
   return evictee;
 }
