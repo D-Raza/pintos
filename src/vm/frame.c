@@ -400,9 +400,6 @@ get_evictee (void)
       {
         /* A page with accessed bit 0 is found */
         return curr_fte;
-        evictee = curr_fte;
-        /* Most recent frame being at the back of the list is maintained */
-        break;
       }
     }
 
@@ -415,7 +412,7 @@ get_evictee (void)
   else
   {
     int sizee = (int) list_size (&writable_page_fte_list);
-    for (int i = 0; i < (3 * sizee); i++) // (curr_used_frames_list_elem = list_next(curr_used_frames_list_elem)) != list_tail (&frame_table_entries_list))
+    for (int i = 0; i < (3 * sizee); i++) 
     {
       curr_fte = list_entry (list_pop_front (&writable_page_fte_list), struct frame_table_entry, list_elem);
       ASSERT (curr_fte != NULL);
@@ -430,9 +427,6 @@ get_evictee (void)
       {
         /* A page with accessed bit 0 is found */
         return curr_fte;
-        evictee = curr_fte;
-        /* Most recent frame being at the back of the list is maintained */
-        break;
       }
     }
 
