@@ -36,6 +36,7 @@ static bool shareable_hash_less_func (const struct hash_elem *h1_raw, const stru
 static struct frame_table_entry* find_frame (void *kpage);
 static struct frame_table_entry* get_evictee_random (void);
 static struct frame_table_entry* get_evictee (void);
+static struct frame_table_entry* find_evictee(struct list *frame_table_enties_list);
 
 /* Initialises the frame table and associated structs. */
 void
@@ -379,64 +380,49 @@ find_shareable_page (struct inode *file_inode, off_t offset)
 static struct frame_table_entry*
 get_evictee (void)
 {
-  struct frame_table_entry *curr_fte;
   struct frame_table_entry *evictee;
 
   if (!list_empty(&read_only_page_fte_list))
   {
-    int size = (int) list_size (&read_only_page_fte_list);
-    for (int i = 0; i < (3 * size); i++)
-    {
-      curr_fte = list_entry (list_pop_front (&read_only_page_fte_list), struct frame_table_entry, list_elem);
-      ASSERT (curr_fte != NULL);
-
-      if (pagedir_is_accessed(curr_fte->t->pagedir, curr_fte->upage))
-      {
-        pagedir_set_accessed(curr_fte->t->pagedir, curr_fte->upage, false);
-        list_push_back(&read_only_page_fte_list, &curr_fte->list_elem);
-        continue;
-      }
-      else
-      {
-        /* A page with accessed bit 0 is found */
-        return curr_fte;
-      }
-    }
-
-    if (evictee == NULL)
-    {
-      /* Since no pages with access bit 0 is found, clear the oldest element */
-      evictee = list_entry(list_begin(&read_only_page_fte_list), struct frame_table_entry, list_elem);
-    }
+    evictee = find_evictee(&read_only_page_fte_list);
   }
   else
   {
-    int sizee = (int) list_size (&writable_page_fte_list);
-    for (int i = 0; i < (3 * sizee); i++) 
-    {
-      curr_fte = list_entry (list_pop_front (&writable_page_fte_list), struct frame_table_entry, list_elem);
-      ASSERT (curr_fte != NULL);
-
-      if (pagedir_is_accessed(curr_fte->t->pagedir, curr_fte->upage))
-      {
-        pagedir_set_accessed(curr_fte->t->pagedir, curr_fte->upage, false);
-        list_push_back(&writable_page_fte_list, &curr_fte->list_elem);
-        continue;
-      }
-      else
-      {
-        /* A page with accessed bit 0 is found */
-        return curr_fte;
-      }
-    }
-
-    if (evictee == NULL)
-    {
-      /* Since no pages with access bit 0 is found, clear the oldest element */
-      evictee = list_entry(list_begin(&writable_page_fte_list), struct frame_table_entry, list_elem);
-    }
+    evictee = find_evictee(&writable_page_fte_list);
   }
 
   ASSERT(evictee);
+  return evictee;
+}
+
+static struct frame_table_entry*
+find_evictee (struct list *frame_table_entries_list)
+{
+  struct frame_table_entry *evictee;
+  struct frame_table_entry *curr_fte;
+
+  int size = (int) list_size (frame_table_entries_list);
+  for (int i = 0; i < (3 * size); i++)
+  {
+    curr_fte = list_entry (list_pop_front (frame_table_entries_list), struct frame_table_entry, list_elem);
+    ASSERT (curr_fte != NULL);
+    if (pagedir_is_accessed(curr_fte->t->pagedir, curr_fte->upage))
+    {
+      pagedir_set_accessed(curr_fte->t->pagedir, curr_fte->upage, false);
+      list_push_back(frame_table_entries_list, &curr_fte->list_elem);
+      continue;
+    }
+    else
+    {
+      /* A page with accessed bit 0 is found */
+      return curr_fte;
+    }
+  }
+  if (evictee == NULL)
+  {
+    /* Since no pages with access bit 0 is found, clear the oldest element */
+    evictee = list_entry(list_begin(frame_table_entries_list), struct frame_table_entry, list_elem);
+  }
+
   return evictee;
 }
