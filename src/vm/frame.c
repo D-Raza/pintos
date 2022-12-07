@@ -16,6 +16,12 @@ static struct hash frame_table;
 /* List containing all frame table entries (used for eviction) */
 struct list frame_table_entries_list;
 
+/* List containing all frame table entries that have read-only page (used for eviction) */
+struct list read_only_page_fte_list;
+
+/* List containing all frame table entries that have writable page (used for eviction) */
+struct list writable_page_fte_list;
+
 /* The table of shareable pages */
 static struct hash shareable_table;
 
@@ -43,6 +49,8 @@ frame_init (void)
     hash_init (&shareable_table, shareable_hash_hash_func, shareable_hash_less_func, NULL);
     lock_init (&shareable_table_lock);
     list_init(&frame_table_entries_list);
+    list_init(&read_only_page_fte_list);
+    list_init(&writable_page_fte_list);
     // examine_ptr = list_begin (&used_frames_list);
     // reset_ptr = list_begin (&used_frames_list);
 }
