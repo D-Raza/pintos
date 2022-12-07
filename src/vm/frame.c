@@ -51,8 +51,6 @@ frame_init (void)
     list_init(&frame_table_entries_list);
     list_init(&read_only_page_fte_list);
     list_init(&writable_page_fte_list);
-    // examine_ptr = list_begin (&used_frames_list);
-    // reset_ptr = list_begin (&used_frames_list);
 }
 
 void 
@@ -85,9 +83,21 @@ frame_install (void *kpage, void *upage, struct shareable_page *shpage)
       pgtr->page = upage;
       list_push_back (&fte->page_table_refs, &pgtr->elem);
 
-      /* Add entries to frame table and frame table entries list */
+      /* Add entries to frame table and frame table entries lists */
       // pagedir_set_page (pgtr->pd, upage, kpage, writable);
       hash_insert (&frame_table, &fte->hash_elem);
+
+      if (!pagedir_is_writable(fte->t->pagedir, fte->upage))
+      {
+        /* If fte contains read-only page, add it to read_only_page_fte_list */
+        list_push_back(&read_only_page_fte_list, &fte->list_elem);
+      }
+      else
+      {
+        /* If fte contains writable page, add it to writable_page_fte_list */
+        list_push_back(&writable_page_fte_list, &fte->list_elem);
+      }
+
       list_push_back(&frame_table_entries_list, &fte->list_elem);
       lock_release (&frame_table_lock);
 
