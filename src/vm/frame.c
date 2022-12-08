@@ -34,9 +34,9 @@ static unsigned shareable_hash_hash_func (const struct hash_elem *h, void *aux U
 static bool shareable_hash_less_func (const struct hash_elem *h1_raw, const struct hash_elem *h2_raw, void *aux UNUSED);
 
 static struct frame_table_entry* find_frame (void *kpage);
-static struct frame_table_entry* get_evictee_random (void);
 static struct frame_table_entry* get_evictee (void);
 static struct frame_table_entry* find_evictee(struct list *frame_table_enties_list);
+static bool frame_is_accessed (struct frame_table_entry* fte); 
 
 /* Initialises the frame table and associated structs. */
 void
@@ -264,27 +264,6 @@ frame_free (void *kpage)
 }
 
 static struct frame_table_entry*
-get_evictee_random (void)
-{
-  struct frame_table_entry *ft_entry = NULL;
-
-  struct hash_iterator i;
-
-  hash_first (&i, &frame_table);
-  while (hash_next (&i))
-    {
-      struct hash_elem *he = hash_cur (&i);
-      struct frame_table_entry *fte = hash_entry (he, struct frame_table_entry, hash_elem);
-      if (fte)
-        {
-          ft_entry = fte;
-          break;
-        }
-    }
-  return ft_entry;
-}
-
-static struct frame_table_entry*
 find_frame (void *kpage)
 {
   struct frame_table_entry fte_aux = {.kpage = kpage};
@@ -423,4 +402,22 @@ find_evictee (struct list *frame_table_entries_list)
   }
 
   return evictee;
+}
+
+static bool 
+frame_is_accessed (struct frame_table_entry* fte) 
+{
+  bool non_accessed = true;
+  struct page_table_ref *curr_page_table_ref;
+  struct list_elem *curr_page_table_refs_elem = list_head(&fte->page_table_refs);
+  while ((curr_page_table_refs_elem = list_next(curr_page_table_refs_elem)) != list_tail(&fte->page_table_refs)) {
+    curr_page_table_ref = list_entry(curr_page_table_refs_elem, struct page_table_ref, elem);
+
+    if (pagedir_is_accessed(curr_page_table_ref->pd, curr_page_table_ref->page)) {
+      non_accessed = false;
+      break;
+    }
+  }
+
+  return non_accessed;
 }
