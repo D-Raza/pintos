@@ -743,7 +743,7 @@ install_page (void *upage, void *kpage, bool writable)
   
   #ifdef VM
   result &= spt_add_frame_page (t->sup_page_table, upage, kpage, true);
-  frame_install (kpage, upage, NULL);
+  frame_install (kpage, upage, NULL, false);
   #endif
 
   return result;
