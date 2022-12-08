@@ -149,11 +149,14 @@ frame_get (enum palloc_flags f)
         struct frame_table_entry *evictee = get_evictee ();
         lock_release (&frame_table_lock);
 
-        if (!pagedir_is_writable(evictee->t->pagedir, evictee->upage) || !pagedir_is_dirty(evictee->t->pagedir, evictee->upage)) 
+        if (!pagedir_is_writable(evictee->t->pagedir, evictee->kpage) || !pagedir_is_dirty(evictee->t->pagedir, evictee->kpage)) 
         {
-          /* TODO: frame_free*/
+          frame_free (evictee->kpage);
+          kpage = palloc_get_page (PAL_USER | f);
+          ASSERT (kpage != NULL);
+          return kpage;
         } 
-        else if (pagedir_is_dirty(evictee->t->pagedir, evictee->upage) /* && is mmap file */) 
+        else if (pagedir_is_dirty(evictee->t->pagedir, evictee->kpage) /* && is mmap file */) 
         {
           /* TODO: write back to file and free */
         } 
