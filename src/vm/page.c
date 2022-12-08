@@ -47,9 +47,8 @@ spt_load_handler (struct sup_page_table *sp_table, void *fault_addr, uint32_t *p
   /* if page is shareable, check if it is already in frame */
   if (spt_entry->writable == false)
   {
-    bool previously_held = lock_held_by_current_thread (&file_sys_lock);
     struct inode *inode;
-    if (!previously_held){
+    if (!lock_held_by_current_thread (&file_sys_lock)){
       file_sys_lock_acquire ();
       inode = file_get_inode (spt_entry->file);
       file_sys_lock_release ();
@@ -92,9 +91,8 @@ spt_load_handler (struct sup_page_table *sp_table, void *fault_addr, uint32_t *p
         writable = spt_entry->writable;
 	if (!writable)
 	{
-	  bool previously_held = lock_held_by_current_thread (&file_sys_lock);
 	  struct inode *inode;
-          if (!previously_held){
+          if (!lock_held_by_current_thread (&file_sys_lock)){
             file_sys_lock_acquire ();
             inode = file_get_inode (spt_entry->file);
             file_sys_lock_release ();
@@ -166,8 +164,7 @@ spt_add_file (struct sup_page_table *sp_table, void *upage, bool writable, struc
       spt_entry->type = entry_type;
       spt_entry->upage = upage;
       if (entry_type == PAGE_MMAP){
-	bool previously_held = lock_held_by_current_thread (&file_sys_lock);
-        if (!previously_held){
+	if (!lock_held_by_current_thread (&file_sys_lock)){
           file_sys_lock_acquire ();
           spt_entry->file = file_reopen (file);
           file_sys_lock_release ();
@@ -277,7 +274,6 @@ spt_clear_entry (void *upage, bool last)
 {
   struct sup_page_table *spt = thread_current ()->sup_page_table;
   struct sup_page_table_entry *entry = find_spte (thread_current ()->sup_page_table, upage);
-  bool previously_held = lock_held_by_current_thread (&file_sys_lock);
   if (entry == NULL)
   {
     return false;
@@ -286,7 +282,7 @@ spt_clear_entry (void *upage, bool last)
   {
     if (last)
     {
-      if (!previously_held){
+      if (!lock_held_by_current_thread (&file_sys_lock)){
 	file_sys_lock_acquire ();
         file_close (entry -> file);
         file_sys_lock_release ();
@@ -304,8 +300,7 @@ static bool
 spt_load_file (struct sup_page_table_entry *spt_entry, void *kpage)
 {
   off_t offt;
-  bool previously_held = lock_held_by_current_thread (&file_sys_lock);
-  if (!previously_held){
+  if (!lock_held_by_current_thread (&file_sys_lock)){
     file_sys_lock_acquire ();
     offt = file_read_at (spt_entry->file, kpage, spt_entry->read_bytes, spt_entry->offset);
     file_sys_lock_release ();
@@ -355,8 +350,7 @@ spt_save_page (uint32_t *pd, void *upage)
   else
   {
     void *kpage = pagedir_get_page (pd, upage);
-    bool previously_held = lock_held_by_current_thread (&file_sys_lock);
-    if (!previously_held){
+    if (!lock_held_by_current_thread (&file_sys_lock)){
       file_sys_lock_acquire ();
       file_write_at (entry->file, kpage, entry->read_bytes, entry->offset);
       file_sys_lock_release ();
