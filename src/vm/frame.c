@@ -138,6 +138,7 @@ frame_get (enum palloc_flags f)
     return palloc_get_page (f);
     #else
 
+    lock_acquire (&frame_table_lock);
     /* Try to get memory page */
     void *kpage = palloc_get_page(PAL_USER | f);
     
@@ -145,9 +146,7 @@ frame_get (enum palloc_flags f)
       {
         /* Evict a page if there are no more pages */
 
-        lock_acquire (&frame_table_lock);
         struct frame_table_entry *evictee = get_evictee ();
-        lock_release (&frame_table_lock);
 
         if (!pagedir_is_writable(evictee->t->pagedir, evictee->upage) || !pagedir_is_dirty(evictee->t->pagedir, evictee->upage)) 
         {
@@ -172,6 +171,7 @@ frame_get (enum palloc_flags f)
         ASSERT (kpage != NULL);
       }
     
+    lock_release (&frame_table_lock);
     return kpage;
     #endif
 }
