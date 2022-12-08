@@ -161,7 +161,7 @@ page_fault (struct intr_frame *f)
        spt_add_all_zero_page(t->sup_page_table, fault_addr_rounded);
      }
 
-  if (spt_load_handler (t->sup_page_table, fault_addr_rounded, t->pagedir))
+  if (spt_load_handler (t->sup_page_table, fault_addr_rounded, t->pagedir, write))
     {
       return;
     }
