@@ -51,7 +51,7 @@ frame_init (void)
 }
 
 void 
-frame_install (void *kpage, void *upage, struct shareable_page *shpage)
+frame_install (void *kpage, void *upage, struct shareable_page *shpage, bool is_mmap)
 {
   #ifdef VM
 
@@ -66,6 +66,7 @@ frame_install (void *kpage, void *upage, struct shareable_page *shpage)
       fte->kpage = kpage;
       fte->upage = upage;
       fte->shpage = shpage;
+      fte->is_mmap = is_mmap;
       list_init (&fte->page_table_refs);
       fte->evictable = false;
       fte->t = thread_current ();
@@ -151,16 +152,15 @@ frame_get (enum palloc_flags f)
 
         if (pagedir_is_writable(evictee->t->pagedir, evictee->kpage) && pagedir_is_dirty(evictee->t->pagedir, evictee->kpage)) 
         {
-          size_t swap_slot = swap_out (evictee->kpage);
-          bool x = set_page_to_swap (evictee->t->sup_page_table, evictee->upage, swap_slot);
-
-          if (pagedir_is_dirty(evictee->t->pagedir, evictee->kpage) /* && is mmap file */) 
+          if (evictee->is_mmap) 
           {
-            /* TODO: write back to file and free */
+            struct page_table_ref *page_ref = list_entry(list_head(&evictee->page_table_refs), struct page_table_ref, elem);
+            spt_save_page(page_ref->pd, page_ref->page);
           }
           else 
           {
-            /* TODO: write to swap */
+            size_t swap_slot = swap_out (evictee->kpage);
+            set_page_to_swap (evictee->t->sup_page_table, evictee->upage, swap_slot);
           }
         } 
 

@@ -20,6 +20,7 @@ struct frame_table_entry
     struct list_elem list_elem;   /* List element for eviction */
     bool evictable;               /* Whether the frame is evictable */
     struct thread *t;             /* Process that owns the frame */
+    bool is_mmap;
 };
 
 struct page_table_ref 
@@ -43,7 +44,7 @@ void frame_free_process (void *kpage, uint32_t *pd, void *upage);
 void frame_free (void *kpage);
 
 void* frame_get (enum palloc_flags f);
-void frame_install (void *kpage, void *upage, struct shareable_page *shpage);
+void frame_install (void *kpage, void *upage, struct shareable_page *shpage, bool is_mmap);
 void frame_augment (struct frame_table_entry* fte, uint32_t *pd, void *upage);
 
 struct shareable_page* shareable_page_add (struct inode *file_inode, off_t offset);
