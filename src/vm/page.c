@@ -134,7 +134,7 @@ spt_load_handler (struct sup_page_table *sp_table, void *fault_addr, uint32_t *p
     }
   // spt_entry->type = PAGE_FRAME;
   // spt_entry->kpage = kpage;
-  frame_install (kpage, fault_addr, shpage);
+  frame_install (kpage, fault_addr, shpage, spt_entry->type == PAGE_MMAP);
   pagedir_set_dirty (pd, fault_addr, false);
   return true;
 }

@@ -34,9 +34,9 @@ static unsigned shareable_hash_hash_func (const struct hash_elem *h, void *aux U
 static bool shareable_hash_less_func (const struct hash_elem *h1_raw, const struct hash_elem *h2_raw, void *aux UNUSED);
 
 static struct frame_table_entry* find_frame (void *kpage);
-static struct frame_table_entry* get_evictee_random (void);
 static struct frame_table_entry* get_evictee (void);
 static struct frame_table_entry* find_evictee(struct list *frame_table_enties_list);
+static bool frame_is_accessed (struct frame_table_entry* fte); 
 
 /* Initialises the frame table and associated structs. */
 void
@@ -51,7 +51,7 @@ frame_init (void)
 }
 
 void 
-frame_install (void *kpage, void *upage, struct shareable_page *shpage)
+frame_install (void *kpage, void *upage, struct shareable_page *shpage, bool is_mmap)
 {
   #ifdef VM
 
@@ -66,6 +66,7 @@ frame_install (void *kpage, void *upage, struct shareable_page *shpage)
       fte->kpage = kpage;
       fte->upage = upage;
       fte->shpage = shpage;
+      fte->is_mmap = is_mmap;
       list_init (&fte->page_table_refs);
       fte->evictable = false;
       fte->t = thread_current ();
@@ -148,25 +149,21 @@ frame_get (enum palloc_flags f)
 
         struct frame_table_entry *evictee = get_evictee ();
 
-        if (!pagedir_is_writable(evictee->t->pagedir, evictee->upage) || !pagedir_is_dirty(evictee->t->pagedir, evictee->upage)) 
+        if (pagedir_is_writable(evictee->t->pagedir, evictee->kpage) && pagedir_is_dirty(evictee->t->pagedir, evictee->kpage)) 
         {
-          /* TODO: frame_free*/
+          if (evictee->is_mmap) 
+          {
+            struct page_table_ref *page_ref = list_entry(list_head(&evictee->page_table_refs), struct page_table_ref, elem);
+            spt_save_page(page_ref->pd, page_ref->page);
+          }
+          else 
+          {
+            size_t swap_slot = swap_out (evictee->kpage);
+            set_page_to_swap (evictee->t->sup_page_table, evictee->upage, swap_slot);
+          }
         } 
-        else if (pagedir_is_dirty(evictee->t->pagedir, evictee->upage) /* && is mmap file */) 
-        {
-          /* TODO: write back to file and free */
-        } 
-        else 
-        {
-          /* TODO: write to swap */
-        }
-
-        size_t swap_slot = swap_out (evictee->kpage);
-
-        bool x = set_page_to_swap (evictee->t->sup_page_table, evictee->upage, swap_slot);
 
         frame_free (evictee->kpage);
-
         kpage = palloc_get_page (PAL_USER | f);
         ASSERT (kpage != NULL);
       }
@@ -261,27 +258,6 @@ frame_free (void *kpage)
     /* Release the lock */
     lock_release (&frame_table_lock);
     #endif
-}
-
-static struct frame_table_entry*
-get_evictee_random (void)
-{
-  struct frame_table_entry *ft_entry = NULL;
-
-  struct hash_iterator i;
-
-  hash_first (&i, &frame_table);
-  while (hash_next (&i))
-    {
-      struct hash_elem *he = hash_cur (&i);
-      struct frame_table_entry *fte = hash_entry (he, struct frame_table_entry, hash_elem);
-      if (fte)
-        {
-          ft_entry = fte;
-          break;
-        }
-    }
-  return ft_entry;
 }
 
 static struct frame_table_entry*
@@ -423,4 +399,22 @@ find_evictee (struct list *frame_table_entries_list)
   }
 
   return evictee;
+}
+
+static bool 
+frame_is_accessed (struct frame_table_entry* fte) 
+{
+  bool non_accessed = true;
+  struct page_table_ref *curr_page_table_ref;
+  struct list_elem *curr_page_table_refs_elem = list_head(&fte->page_table_refs);
+  while ((curr_page_table_refs_elem = list_next(curr_page_table_refs_elem)) != list_tail(&fte->page_table_refs)) {
+    curr_page_table_ref = list_entry(curr_page_table_refs_elem, struct page_table_ref, elem);
+
+    if (pagedir_is_accessed(curr_page_table_ref->pd, curr_page_table_ref->page)) {
+      non_accessed = false;
+      break;
+    }
+  }
+
+  return non_accessed;
 }
