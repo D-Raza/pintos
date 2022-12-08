@@ -54,13 +54,16 @@ spt_load_handler (struct sup_page_table *sp_table, void *fault_addr, uint32_t *p
   if (spt_entry->writable == false)
   {
     struct inode *inode;
-    if (!lock_held_by_current_thread (&file_sys_lock)){
+    file_sys_lock_acquire ();
+    /*if (!lock_held_by_current_thread (&file_sys_lock)){
       file_sys_lock_acquire ();
       inode = file_get_inode (spt_entry->file);
       file_sys_lock_release ();
     } else {
       inode = file_get_inode (spt_entry->file);
-    }
+    }*/
+    inode = file_get_inode (spt_entry->file);
+    file_sys_lock_release ();
     struct frame_table_entry *fte = find_shareable_page (inode, spt_entry->offset);
     if (fte)
     {
@@ -99,13 +102,16 @@ spt_load_handler (struct sup_page_table *sp_table, void *fault_addr, uint32_t *p
 	if (!writable)
 	{
 	  struct inode *inode;
-          if (!lock_held_by_current_thread (&file_sys_lock)){
+	  file_sys_lock_acquire ();
+	  inode = file_get_inode (spt_entry->file);
+	  file_sys_lock_release ();
+          /*if (!lock_held_by_current_thread (&file_sys_lock)){
             file_sys_lock_acquire ();
             inode = file_get_inode (spt_entry->file);
             file_sys_lock_release ();
 	  } else {
 	    inode = file_get_inode (spt_entry->file);
-	  }
+	  }*/
 	  shpage = shareable_page_add (inode, spt_entry->offset);
 	}
         break;
@@ -171,13 +177,16 @@ spt_add_file (struct sup_page_table *sp_table, void *upage, bool writable, struc
       spt_entry->type = entry_type;
       spt_entry->upage = upage;
       if (entry_type == PAGE_MMAP){
-	if (!lock_held_by_current_thread (&file_sys_lock)){
+	file_sys_lock_acquire ();
+	spt_entry->file = file_reopen (file);
+	file_sys_lock_release ();
+	/*if (!lock_held_by_current_thread (&file_sys_lock)){
           file_sys_lock_acquire ();
           spt_entry->file = file_reopen (file);
           file_sys_lock_release ();
 	} else {
 	  spt_entry->file = file_reopen (file);
-	}
+	}*/
       } else {
 	spt_entry->file = file;
       }
@@ -309,13 +318,16 @@ spt_clear_entry (void *upage, bool last)
   {
     if (last)
     {
-      if (!lock_held_by_current_thread (&file_sys_lock)){
+      file_sys_lock_acquire ();
+      file_close (entry->file);
+      file_sys_lock_release ();
+      /*if (!lock_held_by_current_thread (&file_sys_lock)){
 	file_sys_lock_acquire ();
         file_close (entry -> file);
         file_sys_lock_release ();
       } else {
 	file_close (entry ->file);
-      }
+      }*/
     }
     hash_delete (&spt->hash_spt_table, &entry->hash_elem);
     free_spt_entry (&entry -> hash_elem, NULL);
@@ -326,14 +338,17 @@ spt_clear_entry (void *upage, bool last)
 static bool 
 spt_load_file (struct sup_page_table_entry *spt_entry, void *kpage)
 {
-  off_t offt;
+  file_sys_lock_acquire ();
+  off_t offt = file_read_at (spt_entry->file, kpage, spt_entry->read_bytes, spt_entry->offset);
+  file_sys_lock_release ();
+  /*off_t offt;
   if (!lock_held_by_current_thread (&file_sys_lock)){
     file_sys_lock_acquire ();
     offt = file_read_at (spt_entry->file, kpage, spt_entry->read_bytes, spt_entry->offset);
     file_sys_lock_release ();
   } else {
     offt = file_read_at (spt_entry->file, kpage, spt_entry->read_bytes, spt_entry->offset);
-  }
+  }*/
   if (offt != (int) spt_entry->read_bytes)
      {
        return false;
@@ -377,13 +392,16 @@ spt_save_page (uint32_t *pd, void *upage)
   else
   {
     void *kpage = pagedir_get_page (pd, upage);
-    if (!lock_held_by_current_thread (&file_sys_lock)){
+    file_sys_lock_acquire ();
+    file_write_at (entry->file, kpage, entry->read_bytes, entry->offset);
+    file_sys_lock_release ();
+    /*if (!lock_held_by_current_thread (&file_sys_lock)){
       file_sys_lock_acquire ();
       file_write_at (entry->file, kpage, entry->read_bytes, entry->offset);
       file_sys_lock_release ();
     } else {
       file_write_at (entry->file, kpage, entry->read_bytes, entry->offset);
-    }
+    }*/
     return true;
   }
 }
