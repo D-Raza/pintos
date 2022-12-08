@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include "userprog/gdt.h"
 #include "threads/interrupt.h"
+#include "threads/synch.h"
 #include "threads/thread.h"
 #include "vm/page.h"
 
@@ -11,6 +12,8 @@ static long long page_fault_cnt;
 
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
+
+static struct lock page_fault_lock; 
 
 /* Registers handlers for interrupts that can be caused by user
    programs.
@@ -56,6 +59,8 @@ exception_init (void)
      We need to disable interrupts for page faults because the
      fault address is stored in CR2 and needs to be preserved. */
   intr_register_int (14, 0, INTR_OFF, page_fault, "#PF Page-Fault Exception");
+
+  lock_init (&page_fault_lock);
 }
 
 /* Prints exception statistics. */
@@ -122,6 +127,7 @@ static bool check_stack_growth (void *fault_addr, void *esp);
 static void
 page_fault (struct intr_frame *f) 
 {
+  lock_acquire (&page_fault_lock);  
 
   bool not_present;  /* True: not-present page, false: writing r/o page. */
   bool write;        /* True: access was write, false: access was read. */
@@ -163,6 +169,7 @@ page_fault (struct intr_frame *f)
 
   if (spt_load_handler (t->sup_page_table, fault_addr_rounded, t->pagedir, write))
     {
+      lock_release (&page_fault_lock);
       return;
     }
 
@@ -174,6 +181,7 @@ page_fault (struct intr_frame *f)
     {
       f->eip = (void *) f->eax;
       f->eax = 0xffffffff;
+      lock_release (&page_fault_lock);
       return;
     }
    
@@ -185,6 +193,7 @@ page_fault (struct intr_frame *f)
           not_present ? "not present" : "rights violation",
           write ? "writing" : "reading",
           user ? "user" : "kernel");
+  lock_release (&page_fault_lock);
   kill (f);
 }
 
