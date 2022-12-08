@@ -105,10 +105,7 @@ main (void)
   malloc_init ();
   paging_init ();
 
-#ifdef VM
-  frame_init ();
-  swap_init ();
-#endif
+
 
   /* Segmentation. */
 #ifdef USERPROG
@@ -136,6 +133,11 @@ main (void)
   ide_init ();
   locate_block_devices ();
   filesys_init (format_filesys);
+#endif
+
+#ifdef VM
+  frame_init ();
+  swap_init ();
 #endif
 
   printf ("Boot complete.\n");

@@ -7,18 +7,20 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "userprog/pagedir.h"
-
+#include "devices/swap.h"
+#include <stdio.h>
 
 /* The frame table */
 static struct hash frame_table;
 
+/* List containing all frame table entries that have read-only page (used for eviction) */
+struct list read_only_page_fte_list;
+
+/* List containing all frame table entries that have writable page (used for eviction) */
+struct list writable_page_fte_list;
+
 /* The table of shareable pages */
 static struct hash shareable_table;
-
-/* A circular list of used frames for eviction (Two-Handed clock algorithm) */
-static struct list used_frames_list; 
-static struct list_elem *examine_ptr;
-static struct list_elem *reset_ptr;
 
 /* Locks for the frame table and table of shareable pages */
 static struct lock frame_table_lock;
@@ -32,18 +34,20 @@ static unsigned shareable_hash_hash_func (const struct hash_elem *h, void *aux U
 static bool shareable_hash_less_func (const struct hash_elem *h1_raw, const struct hash_elem *h2_raw, void *aux UNUSED);
 
 static struct frame_table_entry* find_frame (void *kpage);
+static struct frame_table_entry* get_evictee_random (void);
+static struct frame_table_entry* get_evictee (void);
+static struct frame_table_entry* find_evictee(struct list *frame_table_enties_list);
 
 /* Initialises the frame table and associated structs. */
 void
 frame_init (void)
 {   
     hash_init (&frame_table, frame_hash_hash_func, frame_hash_less_func, NULL);
-    list_init (&used_frames_list);
     lock_init (&frame_table_lock);
     hash_init (&shareable_table, shareable_hash_hash_func, shareable_hash_less_func, NULL);
     lock_init (&shareable_table_lock);
-    // examine_ptr = list_begin (&used_frames_list);
-    // reset_ptr = list_begin (&used_frames_list);
+    list_init(&read_only_page_fte_list);
+    list_init(&writable_page_fte_list);
 }
 
 void 
@@ -53,7 +57,7 @@ frame_install (void *kpage, void *upage, struct shareable_page *shpage)
 
   lock_acquire (&frame_table_lock);
   /* Add entry to the frame table */
-  // void *kpage = frame_get (f);
+  // void *kpage = frame_get (f);ƒ
   struct frame_table_entry *fte = malloc (sizeof (struct frame_table_entry));
 
   if (fte)
@@ -64,6 +68,7 @@ frame_install (void *kpage, void *upage, struct shareable_page *shpage)
       fte->shpage = shpage;
       list_init (&fte->page_table_refs);
       fte->evictable = false;
+      fte->t = thread_current ();
 
       /* Initialise page_table_ref and add to list */
       struct page_table_ref *pgtr = malloc (sizeof (struct page_table_ref));
@@ -75,9 +80,21 @@ frame_install (void *kpage, void *upage, struct shareable_page *shpage)
       pgtr->page = upage;
       list_push_back (&fte->page_table_refs, &pgtr->elem);
 
-      /* Add entries to page table and frame table*/
+      /* Add entries to frame table and frame table entries lists */
       // pagedir_set_page (pgtr->pd, upage, kpage, writable);
       hash_insert (&frame_table, &fte->hash_elem);
+
+      if (!pagedir_is_writable(fte->t->pagedir, fte->upage))
+      {
+        /* If fte contains read-only page, add it to read_only_page_fte_list */
+        list_push_back(&read_only_page_fte_list, &fte->list_elem);
+      }
+      else
+      {
+        /* If fte contains writable page, add it to writable_page_fte_list */
+        list_push_back(&writable_page_fte_list, &fte->list_elem);
+      }
+
       lock_release (&frame_table_lock);
 
       /* If successful and shpage is set, add frame entry to shpage */
@@ -127,14 +144,35 @@ frame_get (enum palloc_flags f)
     if (kpage == NULL) 
       {
         /* Evict a page if there are no more pages */
-        /* For now panic kernel */
-        /* TODO: Eviction */
-        PANIC ("No more memory pages");
+
+        lock_acquire (&frame_table_lock);
+        struct frame_table_entry *evictee = get_evictee ();
+        lock_release (&frame_table_lock);
+
+        if (!pagedir_is_writable(evictee->t->pagedir, evictee->upage) || !pagedir_is_dirty(evictee->t->pagedir, evictee->upage)) 
+        {
+          /* TODO: frame_free*/
+        } 
+        else if (pagedir_is_dirty(evictee->t->pagedir, evictee->upage) /* && is mmap file */) 
+        {
+          /* TODO: write back to file and free */
+        } 
+        else 
+        {
+          /* TODO: write to swap */
+        }
+
+        size_t swap_slot = swap_out (evictee->kpage);
+
+        bool x = set_page_to_swap (evictee->t->sup_page_table, evictee->upage, swap_slot);
+
+        frame_free (evictee->kpage);
+
+        kpage = palloc_get_page (PAL_USER | f);
+        ASSERT (kpage != NULL);
       }
-    else
-      {
-        return kpage;
-      }
+    
+    return kpage;
     #endif
 }
 
@@ -193,6 +231,8 @@ frame_free (void *kpage)
 
     if (ft_entry)
       {
+        list_remove (&ft_entry->list_elem);
+
         /* Delete the entry from the frame table */
         struct hash_elem *he = hash_delete (&frame_table, &ft_entry->hash_elem);
         if (he)
@@ -210,8 +250,8 @@ frame_free (void *kpage)
             if (ft_entry->shpage)
             {
               lock_acquire (&shareable_table_lock);
-	      hash_delete (&shareable_table, &ft_entry->shpage->elem);
-	      lock_release (&shareable_table_lock);
+	            hash_delete (&shareable_table, &ft_entry->shpage->elem);
+	            lock_release (&shareable_table_lock);
               free (ft_entry->shpage);
             }
             palloc_free_page (kpage);
@@ -221,6 +261,27 @@ frame_free (void *kpage)
     /* Release the lock */
     lock_release (&frame_table_lock);
     #endif
+}
+
+static struct frame_table_entry*
+get_evictee_random (void)
+{
+  struct frame_table_entry *ft_entry = NULL;
+
+  struct hash_iterator i;
+
+  hash_first (&i, &frame_table);
+  while (hash_next (&i))
+    {
+      struct hash_elem *he = hash_cur (&i);
+      struct frame_table_entry *fte = hash_entry (he, struct frame_table_entry, hash_elem);
+      if (fte)
+        {
+          ft_entry = fte;
+          break;
+        }
+    }
+  return ft_entry;
 }
 
 static struct frame_table_entry*
@@ -311,4 +372,55 @@ find_shareable_page (struct inode *file_inode, off_t offset)
     lock_release (&shareable_table_lock);
     return NULL;
   }
+}
+
+static struct frame_table_entry*
+get_evictee (void)
+{
+  struct frame_table_entry *evictee;
+
+  if (!list_empty(&read_only_page_fte_list))
+  {
+    evictee = find_evictee(&read_only_page_fte_list);
+  }
+  else
+  {
+    evictee = find_evictee(&writable_page_fte_list);
+  }
+
+  ASSERT(evictee);
+  return evictee;
+}
+
+static struct frame_table_entry*
+find_evictee (struct list *frame_table_entries_list)
+{
+  struct frame_table_entry *evictee;
+  struct frame_table_entry *curr_fte;
+
+  int size = (int) list_size (frame_table_entries_list);
+  for (int i = 0; i < (3 * size); i++)
+  {
+    curr_fte = list_entry (list_pop_front (frame_table_entries_list), struct frame_table_entry, list_elem);
+    ASSERT (curr_fte != NULL);
+    if (pagedir_is_accessed(curr_fte->t->pagedir, curr_fte->upage))
+    {
+      pagedir_set_accessed(curr_fte->t->pagedir, curr_fte->upage, false);
+      list_push_back(frame_table_entries_list, &curr_fte->list_elem);
+      continue;
+    }
+    else
+    {
+      /* A page with accessed bit 0 is found */
+      return curr_fte;
+    }
+  }
+
+  if (evictee == NULL)
+  {
+    /* Since no pages with access bit 0 is found, clear the oldest element */
+    evictee = list_entry(list_begin(frame_table_entries_list), struct frame_table_entry, list_elem);
+  }
+
+  return evictee;
 }

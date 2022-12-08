@@ -3,6 +3,7 @@
 #include "threads/malloc.h"
 #include "userprog/pagedir.h"
 #include "userprog/syscall.h"
+#include "devices/swap.h"
 #include <hash.h>
 #include <string.h>
 #include <stdio.h>
@@ -37,12 +38,13 @@ sup_page_table_create (void)
 bool 
 spt_load_handler (struct sup_page_table *sp_table, void *fault_addr, uint32_t *pd)
 { 
+
   /* Get the page entry at fault address */
   struct sup_page_table_entry *spt_entry = find_spte (sp_table, fault_addr);
   if (!spt_entry) 
     {
       return false;
-   }
+    }
 
   /* if page is shareable, check if it is already in frame */
   if (spt_entry->writable == false)
@@ -80,7 +82,8 @@ spt_load_handler (struct sup_page_table *sp_table, void *fault_addr, uint32_t *p
           spt_load_all_zero (kpage);
           break;
       case PAGE_SWAP:
-        PANIC ("PAGE_SWAP not implemented");
+        swap_in (kpage, spt_entry->swap_slot);
+        spt_entry->kpage = kpage;
         break;
       case PAGE_EXEC:
         if (!spt_load_file (spt_entry, kpage))
@@ -107,8 +110,8 @@ spt_load_handler (struct sup_page_table *sp_table, void *fault_addr, uint32_t *p
           {
             //frame_free (kpage); //TODO see above
             return false;
-	  }
-	break;
+	        }
+	      break;
       case PAGE_FRAME:
         break;
       default:
@@ -200,7 +203,7 @@ spt_add_file (struct sup_page_table *sp_table, void *upage, bool writable, struc
    Returns true if successful, false otherwise. */
 
 bool 
-spt_add_frame_page (struct sup_page_table *sp_table, void *upage, void *kpage)
+spt_add_frame_page (struct sup_page_table *sp_table, void *upage, void *kpage, bool writable)
 {
   struct sup_page_table_entry *spt_entry = malloc (sizeof (struct sup_page_table_entry));
   if (spt_entry)
@@ -208,6 +211,7 @@ spt_add_frame_page (struct sup_page_table *sp_table, void *upage, void *kpage)
       spt_entry->type = PAGE_FRAME;
       spt_entry->upage = upage;
       spt_entry->kpage = kpage;
+      spt_entry->writable = writable;
 
       struct hash_elem *h = hash_insert (&sp_table->hash_spt_table, &spt_entry->hash_elem);
       if (!h)
@@ -224,6 +228,25 @@ spt_add_frame_page (struct sup_page_table *sp_table, void *upage, void *kpage)
     {
       return false;
     }
+}
+
+bool 
+set_page_to_swap (struct sup_page_table *spt, void *upage, size_t swap_slot)
+{
+  struct sup_page_table_entry *spt_entry = find_spte (spt, upage);
+  if (spt_entry)
+    {
+      spt_entry->type = PAGE_SWAP;
+      spt_entry->swap_slot = swap_slot;
+      spt_entry->kpage = NULL;
+      return true;
+    }
+  else 
+    {
+      PANIC ("SET PAGE TO SWAP FAILED: SPTE NOT FOUND");
+      return false;
+    }
+
 }
 
 /* Frees a supplemental page table. */

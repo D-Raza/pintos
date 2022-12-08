@@ -19,6 +19,7 @@ struct frame_table_entry
     struct hash_elem hash_elem;   /* Hash table element */
     struct list_elem list_elem;   /* List element for eviction */
     bool evictable;               /* Whether the frame is evictable */
+    struct thread *t;             /* Process that owns the frame */
 };
 
 struct page_table_ref 
