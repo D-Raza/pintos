@@ -149,28 +149,22 @@ frame_get (enum palloc_flags f)
         struct frame_table_entry *evictee = get_evictee ();
         lock_release (&frame_table_lock);
 
-        if (!pagedir_is_writable(evictee->t->pagedir, evictee->kpage) || !pagedir_is_dirty(evictee->t->pagedir, evictee->kpage)) 
+        if (pagedir_is_writable(evictee->t->pagedir, evictee->kpage) && pagedir_is_dirty(evictee->t->pagedir, evictee->kpage)) 
         {
-          frame_free (evictee->kpage);
-          kpage = palloc_get_page (PAL_USER | f);
-          ASSERT (kpage != NULL);
-          return kpage;
-        } 
-        else if (pagedir_is_dirty(evictee->t->pagedir, evictee->kpage) /* && is mmap file */) 
-        {
-          /* TODO: write back to file and free */
-        } 
-        else 
-        {
-          /* TODO: write to swap */
-        }
+          size_t swap_slot = swap_out (evictee->kpage);
+          bool x = set_page_to_swap (evictee->t->sup_page_table, evictee->upage, swap_slot);
 
-        size_t swap_slot = swap_out (evictee->kpage);
-
-        bool x = set_page_to_swap (evictee->t->sup_page_table, evictee->upage, swap_slot);
+          if (pagedir_is_dirty(evictee->t->pagedir, evictee->kpage) /* && is mmap file */) 
+          {
+            /* TODO: write back to file and free */
+          }
+          else 
+          {
+            /* TODO: write to swap */
+          }
+        } 
 
         frame_free (evictee->kpage);
-
         kpage = palloc_get_page (PAL_USER | f);
         ASSERT (kpage != NULL);
       }
