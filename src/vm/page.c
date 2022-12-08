@@ -36,7 +36,7 @@ sup_page_table_create (void)
 }
 
 bool 
-spt_load_handler (struct sup_page_table *sp_table, void *fault_addr, uint32_t *pd)
+spt_load_handler (struct sup_page_table *sp_table, void *fault_addr, uint32_t *pd, bool write)
 { 
 
   /* Get the page entry at fault address */
@@ -45,6 +45,10 @@ spt_load_handler (struct sup_page_table *sp_table, void *fault_addr, uint32_t *p
     {
       return false;
     }
+  if (write && spt_entry->writable == false)
+  {
+    return false;
+  }
 
   /* if page is shareable, check if it is already in frame */
   if (spt_entry->writable == false)
