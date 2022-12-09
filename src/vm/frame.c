@@ -37,6 +37,7 @@ static struct frame_table_entry* find_frame (void *kpage);
 static struct frame_table_entry* get_evictee (void);
 static struct frame_table_entry* find_evictee(struct list *frame_table_enties_list);
 static bool frame_is_accessed (struct frame_table_entry* fte); 
+static void frame_set_accessed (struct frame_table_entry* fte, bool accessed);
 
 /* Initialises the frame table and associated structs. */
 void
@@ -385,43 +386,56 @@ find_evictee (struct list *frame_table_entries_list)
   {
     curr_fte = list_entry (list_pop_front (frame_table_entries_list), struct frame_table_entry, list_elem);
     ASSERT (curr_fte != NULL);
-    if (pagedir_is_accessed(curr_fte->t->pagedir, curr_fte->upage))
+    if (frame_is_accessed(curr_fte))
     {
-      /* If access bit of page in frame table entry is 1, push the entry to the back of the list and set its access bit as 0 (second-chance) */
-      pagedir_set_accessed(curr_fte->t->pagedir, curr_fte->upage, false);
+      /* If access bit of any page in frame table entry is 1, push the entry to the back of the list and set the access bit of all pages in it as 0 (second-chance) */
+      frame_set_accessed(curr_fte, false);
       list_push_back(frame_table_entries_list, &curr_fte->list_elem);
       continue;
     }
     else
     {
-      /* A page with accessed bit 0 is found */
+      /* A frame table entry containing a page with accessed bit 0 is found */
       return curr_fte;
     }
   }
 
   if (evictee == NULL)
   {
-    /* Since no pages with access bit 0 is found, clear the oldest element */
+    /* Since no frame table entry containing a page with access bit 0 is found, clear the oldest element */
     evictee = list_entry(list_begin(frame_table_entries_list), struct frame_table_entry, list_elem);
   }
 
   return evictee;
 }
 
+/* Checks whether the access bit of any page in a frame table entry is 1 */
 static bool 
 frame_is_accessed (struct frame_table_entry* fte) 
 {
-  bool non_accessed = true;
+  bool accessed = false;
   struct page_table_ref *curr_page_table_ref;
   struct list_elem *curr_page_table_refs_elem = list_head(&fte->page_table_refs);
   while ((curr_page_table_refs_elem = list_next(curr_page_table_refs_elem)) != list_tail(&fte->page_table_refs)) {
     curr_page_table_ref = list_entry(curr_page_table_refs_elem, struct page_table_ref, elem);
 
     if (pagedir_is_accessed(curr_page_table_ref->pd, curr_page_table_ref->page)) {
-      non_accessed = false;
+      accessed = true;
       break;
     }
   }
 
-  return non_accessed;
+  return accessed;
+}
+
+/* Sets the accessed bit of all pages in a frame table entry to ACCESSED */
+static void 
+frame_set_accessed (struct frame_table_entry* fte, bool accessed) 
+{
+  struct page_table_ref *curr_page_table_ref;
+  struct list_elem *curr_page_table_refs_elem = list_head(&fte->page_table_refs);
+  while ((curr_page_table_refs_elem = list_next(curr_page_table_refs_elem)) != list_tail(&fte->page_table_refs)) {
+    curr_page_table_ref = list_entry(curr_page_table_refs_elem, struct page_table_ref, elem);
+    pagedir_set_accessed(curr_page_table_ref->pd, curr_page_table_ref->page, accessed);
+  }
 }
