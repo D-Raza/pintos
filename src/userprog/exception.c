@@ -5,6 +5,7 @@
 #include "threads/interrupt.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
+#include "userprog/pagedir.h"
 #include "vm/page.h"
 
 /* Number of page faults processed. */
@@ -160,18 +161,37 @@ page_fault (struct intr_frame *f)
   
   void *fault_addr_rounded = pg_round_down (fault_addr);
 
-  /* Stack needs to grow */
-   bool grow = user ? check_stack_growth (fault_addr, f->esp) : check_stack_growth (fault_addr, t->user_esp);
-   if (grow)
-     {
-       spt_add_all_zero_page(t->sup_page_table, fault_addr_rounded);
-     }
+  /* Check if not alreadry in pagedir */
+  if (is_user_vaddr (fault_addr_rounded) && pagedir_get_page (t->pagedir, fault_addr_rounded) != NULL)
+  {
+    if (write) {
+      if (pagedir_is_writable (t->pagedir, fault_addr_rounded))
+      {
+        lock_release (&page_fault_lock);
+        return;
+      } else {
+      
+      }
+    } else {
+      lock_release (&page_fault_lock);
+      return;
+    }
+  }
 
   if (spt_load_handler (t->sup_page_table, fault_addr_rounded, t->pagedir, write))
     {
       lock_release (&page_fault_lock);
       return;
     }
+  /* Stack needs to grow */
+   bool grow = user ? check_stack_growth (fault_addr, f->esp) : check_stack_growth (fault_addr, t->user_esp);
+   if (grow)
+     {
+       spt_add_all_zero_page(t->sup_page_table, fault_addr_rounded);
+       spt_load_handler (t->sup_page_table, fault_addr_rounded, t->pagedir, write);
+       lock_release (&page_fault_lock);
+       return;
+     }
 
   #endif
 
