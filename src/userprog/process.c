@@ -240,13 +240,6 @@ process_exit (void)
   
   free_mmap_table (cur->mmaped_files);
   
-  /* Free:
-     The supplemental page table
-     The mmap table(?) later
-     All supplemental page table entries
-     All frames held by the process
-  */
-
   /* Free the supplemental page table and all frames held by the process */
   free_sp_table (cur->sup_page_table);
   #endif
