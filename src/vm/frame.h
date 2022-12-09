@@ -19,7 +19,6 @@ struct frame_table_entry
     struct hash_elem hash_elem;     /* Hash table element */
     struct list_elem list_elem;     /* List element for eviction */
     struct thread *t;               /* Process that owns the frame */
-    bool evictable;                 /* Whether the frame is evictable */
     bool is_mmap;                   /* Whether page in the entry is PAGE_MMAP */
 };
 

@@ -72,7 +72,6 @@ frame_install (void *kpage, void *upage, struct shareable_page *shpage, bool is_
       fte->shpage = shpage;
       fte->is_mmap = is_mmap;
       list_init (&fte->page_table_refs);
-      fte->evictable = false;
       fte->t = thread_current ();
 
       /* Initialise page_table_ref and add to list */
