@@ -36,7 +36,8 @@ static bool shareable_hash_less_func (const struct hash_elem *h1_raw, const stru
 static struct frame_table_entry* find_frame (void *kpage);
 static struct frame_table_entry* get_evictee (void);
 static struct frame_table_entry* find_evictee(struct list *frame_table_enties_list);
-static bool frame_is_accessed (struct frame_table_entry* fte);
+static bool frame_is_accessed (struct frame_table_entry* fte); 
+static void frame_set_accessed (struct frame_table_entry* fte, bool accessed);
 
 /* Initialises the frame table, its associated structs and locks. */
 void
@@ -392,6 +393,8 @@ get_evictee (void)
 static struct frame_table_entry*
 find_evictee (struct list *frame_table_entries_list)
 {
+  lock_acquire(&frame_table_lock);
+
   struct frame_table_entry *evictee;
   struct frame_table_entry *curr_fte;
 
@@ -402,17 +405,18 @@ find_evictee (struct list *frame_table_entries_list)
     {
       curr_fte = list_entry (list_pop_front (frame_table_entries_list), struct frame_table_entry, list_elem);
       ASSERT (curr_fte != NULL);
-      if (pagedir_is_accessed(curr_fte->t->pagedir, curr_fte->upage))
+      if (frame_is_accessed (curr_fte))
         {
-	  /* If access bit of page in frame table entry is 1, push the entry 
-	     to the back of the list and set its access bit as 0 (second-chance) */
-          pagedir_set_accessed(curr_fte->t->pagedir, curr_fte->upage, false);
+	  /* If access bit of any page in frame table entry is 1, push the entry to the back 
+	     of the list and set the access bit of all pages in it as 0 (second-chance) */
+          frame_set_accessed(curr_fte, false);
           list_push_back(frame_table_entries_list, &curr_fte->list_elem);
           continue;
         }
       else
         {
-          /* A page with accessed bit 0 is found */
+          /* A frame table entry containing a page with accessed bit 0 is found */
+          lock_release(&frame_table_lock);
           return curr_fte;
         }
     }
@@ -423,26 +427,40 @@ find_evictee (struct list *frame_table_entries_list)
       evictee = list_entry(list_begin(frame_table_entries_list), struct frame_table_entry, list_elem);
     }
 
+  lock_release(&frame_table_lock);
   return evictee;
 }
 
-/* Returns true if the page table reference in the frame table has not been accessed. 
-   Returns false if the page table reference in the frame table has been acceessed. */
-static bool
-frame_is_accessed (struct frame_table_entry* fte)
+/* Returns true if the access bit of any page in a frame table entry is 1.
+   Otherwise, returns false. */
+static bool 
+frame_is_accessed (struct frame_table_entry* fte) 
 {
-  bool non_accessed = true;
+  bool accessed = false;
   struct page_table_ref *curr_page_table_ref;
   struct list_elem *curr_page_table_refs_elem = list_head(&fte->page_table_refs);
-  while ((curr_page_table_refs_elem = list_next(curr_page_table_refs_elem)) != list_tail(&fte->page_table_refs))
+  while ((curr_page_table_refs_elem = list_next(curr_page_table_refs_elem)) != list_tail(&fte->page_table_refs)) 
     {
-      curr_page_table_ref = list_entry(curr_page_table_refs_elem, struct page_table_ref, elem);
-      if (pagedir_is_accessed(curr_page_table_ref->pd, curr_page_table_ref->page))
-        {
-          non_accessed = false;
-          break;
-        }
+    curr_page_table_ref = list_entry(curr_page_table_refs_elem, struct page_table_ref, elem);
+
+    if (pagedir_is_accessed(curr_page_table_ref->pd, curr_page_table_ref->page)) 
+      {
+        accessed = true;
+        break;
+      }
     }
 
-  return non_accessed;
+  return accessed;
+}
+
+/* Sets the accessed bit of all pages in a frame table entry to ACCESSED */
+static void 
+frame_set_accessed (struct frame_table_entry* fte, bool accessed) 
+{
+  struct page_table_ref *curr_page_table_ref;
+  struct list_elem *curr_page_table_refs_elem = list_head(&fte->page_table_refs);
+  while ((curr_page_table_refs_elem = list_next(curr_page_table_refs_elem)) != list_tail(&fte->page_table_refs)) {
+    curr_page_table_ref = list_entry(curr_page_table_refs_elem, struct page_table_ref, elem);
+    pagedir_set_accessed(curr_page_table_ref->pd, curr_page_table_ref->page, accessed);
+  }
 }
