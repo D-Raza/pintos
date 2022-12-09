@@ -48,4 +48,4 @@ void* frame_get (enum palloc_flags f);
 struct shareable_page* shareable_page_add (struct inode *file_inode, off_t offset);
 struct frame_table_entry *find_shareable_page (struct inode *file_inode, off_t offset);
 
-#endif
+#endif /* vm/frame.h */
