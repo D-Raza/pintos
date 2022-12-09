@@ -376,6 +376,8 @@ a list of frame table entries containing read-only page or a list of frame table
 static struct frame_table_entry*
 find_evictee (struct list *frame_table_entries_list)
 {
+  lock_acquire(&frame_table_lock);
+
   struct frame_table_entry *evictee;
   struct frame_table_entry *curr_fte;
 
@@ -396,6 +398,7 @@ find_evictee (struct list *frame_table_entries_list)
     else
     {
       /* A frame table entry containing a page with accessed bit 0 is found */
+      lock_release(&frame_table_lock);
       return curr_fte;
     }
   }
@@ -406,6 +409,7 @@ find_evictee (struct list *frame_table_entries_list)
     evictee = list_entry(list_begin(frame_table_entries_list), struct frame_table_entry, list_elem);
   }
 
+  lock_release(&frame_table_lock);
   return evictee;
 }
 
