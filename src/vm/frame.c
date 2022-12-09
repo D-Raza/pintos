@@ -57,7 +57,6 @@ frame_install (void *kpage, void *upage, struct shareable_page *shpage, bool is_
 
   lock_acquire (&frame_table_lock);
   /* Add entry to the frame table */
-  // void *kpage = frame_get (f);ƒ
   struct frame_table_entry *fte = malloc (sizeof (struct frame_table_entry));
 
   if (fte)
@@ -82,7 +81,6 @@ frame_install (void *kpage, void *upage, struct shareable_page *shpage, bool is_
       list_push_back (&fte->page_table_refs, &pgtr->elem);
 
       /* Add entries to frame table and frame table entries lists */
-      // pagedir_set_page (pgtr->pd, upage, kpage, writable);
       hash_insert (&frame_table, &fte->hash_elem);
 
       if (!pagedir_is_writable(fte->t->pagedir, fte->upage))
@@ -243,6 +241,7 @@ frame_free (void *kpage)
                  pagedir_clear_page(pr->pd, pr->page);
                  free (pr);
               }
+
             /* Remove and free the corresponding shareable_page table entry, if existed */ 
             if (ft_entry->shpage)
             {
@@ -255,6 +254,7 @@ frame_free (void *kpage)
             free (ft_entry);
           }
       }
+
     /* Release the lock */
     lock_release (&frame_table_lock);
     #endif
@@ -350,6 +350,8 @@ find_shareable_page (struct inode *file_inode, off_t offset)
   }
 }
 
+/* Returns the frame table entry to evict, and prioritize evicting 
+frame table entries containing read-only page over the ones containing writable page */
 static struct frame_table_entry*
 get_evictee (void)
 {
@@ -368,6 +370,8 @@ get_evictee (void)
   return evictee;
 }
 
+/* Finds and returns the frame table entry to evict from the given frame_table_entries_list, which can be
+a list of frame table entries containing read-only page or a list of frame table entries containing writable page */
 static struct frame_table_entry*
 find_evictee (struct list *frame_table_entries_list)
 {
@@ -375,12 +379,15 @@ find_evictee (struct list *frame_table_entries_list)
   struct frame_table_entry *curr_fte;
 
   int size = (int) list_size (frame_table_entries_list);
+
+  /* Traverses the list until a frame table entry containing a page with accessed bit 0 is found */
   for (int i = 0; i < (3 * size); i++)
   {
     curr_fte = list_entry (list_pop_front (frame_table_entries_list), struct frame_table_entry, list_elem);
     ASSERT (curr_fte != NULL);
     if (pagedir_is_accessed(curr_fte->t->pagedir, curr_fte->upage))
     {
+      /* If access bit of page in frame table entry is 1, push the entry to the back of the list and set its access bit as 0 (second-chance) */
       pagedir_set_accessed(curr_fte->t->pagedir, curr_fte->upage, false);
       list_push_back(frame_table_entries_list, &curr_fte->list_elem);
       continue;
