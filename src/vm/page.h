@@ -8,11 +8,11 @@
 
 enum page_type
   {
-    PAGE_ALL_ZERO, /* All zero page*/
-    PAGE_SWAP,     /* Swap page*/
-    PAGE_EXEC,     /* Executable file */
-    PAGE_MMAP,     /* Mapped to memory */
-    PAGE_FRAME     /* On a frame */
+    PAGE_ALL_ZERO,                 /* All zero page */
+    PAGE_SWAP,                     /* Swap page */
+    PAGE_EXEC,                     /* Executable file */
+    PAGE_MMAP,                     /* Mapped to memory */
+    PAGE_FRAME                     /* On a frame */
   };
 
 struct sup_page_table_entry 
@@ -25,7 +25,7 @@ struct sup_page_table_entry
     /* Members for executable files */
     uint32_t read_bytes;           /* Number of bytes to read from file */
     uint32_t zero_bytes;           /* Number of bytes to zero out */
-    bool writable;                 /* Writable page? */
+    bool writable;                 /* Whether page is writable */
     struct file *file;             /* File pointer */
     off_t offset;                  /* Offset */
 
@@ -35,12 +35,12 @@ struct sup_page_table_entry
 
 struct sup_page_table 
 {
-    struct hash hash_spt_table;           /* The hash table*/
+    struct hash hash_spt_table;    /* The hash table */
 };
 struct mmaped_files_table
 {
-    int next_free_mapId;                /* Counter to generate new MapIds */
-    struct hash mmaped_files;           /* Hashmap of mmaped files */
+    int next_free_mapId;           /* Counter to generate new MapIds */
+    struct hash mmaped_files;      /* Hashmap of mmaped files */
 };
 
 struct sup_page_table *sup_page_table_create (void);
